@@ -1,0 +1,12 @@
+name = "ivy-api"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+[vars]
+ENVIRONMENT = "development"
+
+# Uncomment and configure when ready:
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "ivy"
+# database_id = ""
