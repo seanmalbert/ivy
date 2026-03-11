@@ -1,7 +1,11 @@
 import { isIvyMessage } from "@ivy/shared/messages";
 import type { IvyMessage, PageContentMessage } from "@ivy/shared/messages";
-import { API_BASE_URL, STORAGE_KEYS } from "@ivy/shared";
+import { STORAGE_KEYS } from "@ivy/shared";
 import type { TransformInstruction } from "@ivy/shared";
+
+// Use Vite env var if set (production build), otherwise localhost for dev
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 
 export default defineBackground(() => {
   // ── Side Panel Setup ──
