@@ -1,7 +1,7 @@
 import { isIvyMessage } from "@ivy/shared/messages";
 import type { IvyMessage, PageContentMessage } from "@ivy/shared/messages";
 import { API_BASE_URL, STORAGE_KEYS } from "@ivy/shared";
-import type { TransformResponse } from "@ivy/shared";
+import type { TransformInstruction } from "@ivy/shared";
 
 export default defineBackground(() => {
   // ── Side Panel Setup ──
@@ -12,6 +12,33 @@ export default defineBackground(() => {
     }
   });
 
+  // ── Content Script Injection ──
+  // Inject on-demand instead of on every page load to avoid bot detection
+
+  async function ensureContentScript(tabId: number): Promise<boolean> {
+    try {
+      // Check if already injected by sending a ping
+      const response = await chrome.tabs.sendMessage(tabId, {
+        type: "GET_PAGE_CONTENT",
+        payload: {},
+      });
+      return !!response;
+    } catch {
+      // Not injected yet — inject now
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId },
+          files: ["content-scripts/content.js"],
+        });
+        // Small delay to let the script initialize
+        await new Promise((r) => setTimeout(r, 100));
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  }
+
   // ── Transform Cache (in-memory, service worker lifetime) ──
 
   const transformCache = new Map<
@@ -19,14 +46,8 @@ export default defineBackground(() => {
     { instructions: unknown[]; expiresAt: number }
   >();
 
-  function getCacheKey(url: string, prefHash: string): string {
-    return `${url}::${prefHash}`;
-  }
-
-  async function hashPreferences(
-    prefs: Record<string, unknown>
-  ): Promise<string> {
-    const data = new TextEncoder().encode(JSON.stringify(prefs));
+  async function hashString(input: string): Promise<string> {
+    const data = new TextEncoder().encode(input);
     const hash = await crypto.subtle.digest("SHA-256", data);
     return Array.from(new Uint8Array(hash))
       .map((b) => b.toString(16).padStart(2, "0"))
@@ -64,8 +85,9 @@ export default defineBackground(() => {
   async function requestCloudTransform(
     url: string,
     content: string,
-    preferences: Record<string, unknown>
-  ): Promise<TransformResponse | null> {
+    preferences: Record<string, unknown>,
+    regions?: unknown[]
+  ): Promise<{ instructions: TransformInstruction[]; processingMs: number } | null> {
     try {
       const response = await fetch(`${API_BASE_URL}/api/transform`, {
         method: "POST",
@@ -74,14 +96,75 @@ export default defineBackground(() => {
           url,
           content: content.slice(0, 50000),
           preferences,
+          regions: regions?.slice(0, 30),
         }),
       });
 
       if (!response.ok) return null;
-      return (await response.json()) as TransformResponse;
+
+      const result = (await response.json()) as {
+        success: boolean;
+        data?: { instructions: TransformInstruction[]; cached: boolean; processingMs: number };
+      };
+
+      if (!result.success || !result.data) return null;
+      return { instructions: result.data.instructions, processingMs: result.data.processingMs };
     } catch {
       return null;
     }
+  }
+
+  async function requestCloudExplain(
+    text: string,
+    context: string,
+    readingLevel?: string
+  ): Promise<string | null> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/explain`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, context, readingLevel }),
+      });
+
+      if (!response.ok) return null;
+
+      const result = (await response.json()) as {
+        success: boolean;
+        data?: { answer: string };
+      };
+
+      return result.data?.answer ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  // ── Behavioral Events ──
+
+  async function trackEvent(
+    eventType: string,
+    context: Record<string, unknown>
+  ) {
+    try {
+      await fetch(`${API_BASE_URL}/api/events`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: "anonymous", // TODO: Replace with Clerk user ID
+          eventType,
+          context,
+        }),
+      });
+    } catch {
+      // Non-critical, fire and forget
+    }
+  }
+
+  // ── Get Active Tab ──
+
+  async function getActiveTabId(): Promise<number | undefined> {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    return tab?.id;
   }
 
   // ── Message Router ──
@@ -93,20 +176,34 @@ export default defineBackground(() => {
       const message = msg as IvyMessage;
 
       switch (message.type) {
-        case "TRANSFORM_PAGE":
-          handleTransformPage(sender.tab?.id).then(sendResponse);
+        case "TRANSFORM_PAGE": {
+          // sender.tab is undefined when message comes from sidebar/popup
+          const tabIdPromise = sender.tab?.id
+            ? Promise.resolve(sender.tab.id)
+            : getActiveTabId();
+          tabIdPromise.then((tabId) => handleTransformPage(tabId)).then(sendResponse);
           return true;
+        }
 
-        case "HIGHLIGHT_ASK":
-          handleHighlightAsk(
-            message.payload.selectedText,
-            message.payload.context,
-            sender.tab?.id
-          ).then(sendResponse);
+        case "HIGHLIGHT_ASK": {
+          const tabIdPromise = sender.tab?.id
+            ? Promise.resolve(sender.tab.id)
+            : getActiveTabId();
+          tabIdPromise
+            .then((tabId) =>
+              handleHighlightAsk(
+                message.payload.selectedText,
+                message.payload.context,
+                tabId
+              )
+            )
+            .then(sendResponse);
           return true;
+        }
 
         case "PREFERENCES_UPDATED":
           broadcastToTabs(message);
+          trackEvent("preference_changed", message.payload as Record<string, unknown>);
           break;
 
         case "TOGGLE_IVY":
@@ -126,8 +223,37 @@ export default defineBackground(() => {
     });
   }
 
+  async function getPreferences(): Promise<Record<string, unknown>> {
+    const stored = await chrome.storage.local.get(STORAGE_KEYS.PREFERENCES);
+    const raw = stored[STORAGE_KEYS.PREFERENCES];
+    if (!raw) return {};
+
+    try {
+      const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+      return parsed?.state?.preferences ?? parsed?.preferences ?? parsed;
+    } catch {
+      return {};
+    }
+  }
+
   async function handleTransformPage(tabId?: number) {
     if (!tabId) return;
+
+    // Notify sidebar that transform started
+    chrome.runtime.sendMessage({
+      type: "TRANSFORM_STATUS",
+      payload: { status: "transforming" },
+    }).catch(() => {});
+
+    // Inject content script if not already present
+    const injected = await ensureContentScript(tabId);
+    if (!injected) {
+      chrome.runtime.sendMessage({
+        type: "TRANSFORM_STATUS",
+        payload: { status: "error", message: "Cannot access this page" },
+      }).catch(() => {});
+      return;
+    }
 
     const pageContent = await new Promise<
       PageContentMessage["payload"] | null
@@ -142,23 +268,20 @@ export default defineBackground(() => {
       );
     });
 
-    if (!pageContent) return;
-
-    const stored = await chrome.storage.local.get(STORAGE_KEYS.PREFERENCES);
-    let preferences: Record<string, unknown> = {};
-    if (stored[STORAGE_KEYS.PREFERENCES]) {
-      try {
-        const parsed = JSON.parse(stored[STORAGE_KEYS.PREFERENCES]);
-        preferences = parsed?.state?.preferences ?? {};
-      } catch {
-        // Use defaults
-      }
+    if (!pageContent) {
+      chrome.runtime.sendMessage({
+        type: "TRANSFORM_STATUS",
+        payload: { status: "error", message: "Could not read page content" },
+      }).catch(() => {});
+      return;
     }
 
-    const prefHash = await hashPreferences(preferences);
-    const cacheKey = getCacheKey(pageContent.url, prefHash);
+    const preferences = await getPreferences();
+    const prefHash = await hashString(JSON.stringify(preferences));
+    const urlHash = await hashString(pageContent.url);
+    const cacheKey = `${urlHash}::${prefHash}`;
 
-    // Check cache
+    // Check local cache
     const cached = transformCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
       chrome.tabs.sendMessage(tabId, {
@@ -169,22 +292,49 @@ export default defineBackground(() => {
           processingMs: 0,
         },
       });
+      chrome.runtime.sendMessage({
+        type: "TRANSFORM_STATUS",
+        payload: { status: "done", cached: true, processingMs: 0 },
+      }).catch(() => {});
       return;
     }
 
     const startTime = Date.now();
 
-    // Try on-device simplification first
-    await tryOnDeviceSimplify(pageContent.content.slice(0, 3000));
+    // Try on-device first for quick feedback
+    const onDeviceResult = await tryOnDeviceSimplify(
+      pageContent.content.slice(0, 3000)
+    );
+
+    if (onDeviceResult) {
+      // Send quick on-device result while cloud processes
+      chrome.tabs.sendMessage(tabId, {
+        type: "TRANSFORM_RESULT",
+        payload: {
+          instructions: [
+            {
+              selector: "body > p:first-of-type",
+              action: "replace",
+              value: onDeviceResult,
+            },
+          ],
+          cached: false,
+          processingMs: Date.now() - startTime,
+        },
+      });
+    }
 
     // Cloud transform for full page
     const cloudResult = await requestCloudTransform(
       pageContent.url,
       pageContent.content,
-      preferences
+      preferences,
+      pageContent.regions
     );
 
-    if (cloudResult) {
+    const totalMs = Date.now() - startTime;
+
+    if (cloudResult && cloudResult.instructions.length > 0) {
       transformCache.set(cacheKey, {
         instructions: cloudResult.instructions,
         expiresAt: Date.now() + 24 * 60 * 60 * 1000,
@@ -195,9 +345,29 @@ export default defineBackground(() => {
         payload: {
           instructions: cloudResult.instructions,
           cached: false,
-          processingMs: Date.now() - startTime,
+          processingMs: totalMs,
         },
       });
+
+      chrome.runtime.sendMessage({
+        type: "TRANSFORM_STATUS",
+        payload: { status: "done", cached: false, processingMs: totalMs },
+      }).catch(() => {});
+
+      trackEvent("transform_accepted", {
+        url: pageContent.url,
+        instructionCount: cloudResult.instructions.length,
+        processingMs: totalMs,
+      });
+    } else {
+      chrome.runtime.sendMessage({
+        type: "TRANSFORM_STATUS",
+        payload: {
+          status: onDeviceResult ? "done" : "error",
+          message: onDeviceResult ? undefined : "No transformations generated",
+          processingMs: totalMs,
+        },
+      }).catch(() => {});
     }
   }
 
@@ -207,6 +377,8 @@ export default defineBackground(() => {
     tabId?: number
   ) {
     if (!tabId) return;
+
+    await ensureContentScript(tabId);
 
     // Try on-device first
     const onDeviceAnswer = await tryOnDeviceSimplify(
@@ -218,31 +390,28 @@ export default defineBackground(() => {
         type: "HIGHLIGHT_ANSWER",
         payload: { answer: onDeviceAnswer },
       });
+      trackEvent("highlight_ask", { text: selectedText.slice(0, 100), source: "on-device" });
       return;
     }
 
-    // Fall back to cloud
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/explain`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: selectedText, context }),
-      });
+    // Cloud explain
+    const preferences = await getPreferences();
+    const readingLevel = preferences.readingLevel as string | undefined;
 
-      if (response.ok) {
-        const data = (await response.json()) as { answer: string };
-        chrome.tabs.sendMessage(tabId, {
-          type: "HIGHLIGHT_ANSWER",
-          payload: { answer: data.answer },
-        });
-      }
-    } catch {
+    const answer = await requestCloudExplain(selectedText, context, readingLevel);
+
+    if (answer) {
+      chrome.tabs.sendMessage(tabId, {
+        type: "HIGHLIGHT_ANSWER",
+        payload: { answer },
+      });
+      trackEvent("highlight_ask", { text: selectedText.slice(0, 100), source: "cloud" });
+    } else {
       chrome.tabs.sendMessage(tabId, {
         type: "ERROR",
         payload: {
           code: "EXPLAIN_FAILED",
-          message:
-            "Could not explain the selected text. Please try again.",
+          message: "Could not explain the selected text. Make sure the API and AI services are running.",
           source: "service-worker",
         },
       });

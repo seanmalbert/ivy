@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import * as Tabs from "@radix-ui/react-tabs";
 import { usePreferencesStore, useTransformStore } from "../lib/store";
 import { PreferenceChat } from "./PreferenceChat";
@@ -5,7 +6,36 @@ import { PreferencesPanel } from "./PreferencesPanel";
 
 export function Sidebar() {
   const { isOnboarded, isEnabled, setEnabled } = usePreferencesStore();
-  const { isTransforming, lastTransformMs } = useTransformStore();
+  const { status, lastTransformMs, wasCached, transformedCount, error, setResult, setStatus, setError, reset } =
+    useTransformStore();
+
+  // Listen for transform status updates from the service worker
+  useEffect(() => {
+    const listener = (msg: unknown) => {
+      const m = msg as { type?: string; payload?: Record<string, unknown> };
+      if (m.type === "TRANSFORM_STATUS" && m.payload) {
+        const p = m.payload;
+        switch (p.status) {
+          case "transforming":
+            setStatus("transforming");
+            break;
+          case "done":
+            setResult(
+              (p.processingMs as number) ?? 0,
+              (p.cached as boolean) ?? false,
+              (p.transformedCount as number) ?? 0
+            );
+            break;
+          case "error":
+            setError((p.message as string) ?? "Transform failed");
+            break;
+        }
+      }
+    };
+
+    chrome.runtime.onMessage.addListener(listener);
+    return () => chrome.runtime.onMessage.removeListener(listener);
+  }, [setResult, setStatus, setError]);
 
   if (!isOnboarded) {
     return (
@@ -32,16 +62,11 @@ export function Sidebar() {
           <h1 className="text-base font-semibold text-gray-900">Ivy</h1>
         </div>
         <div className="flex items-center gap-2">
-          {isTransforming && (
-            <span className="text-xs text-violet-600 animate-pulse">
-              Transforming...
-            </span>
-          )}
-          {lastTransformMs && !isTransforming && (
-            <span className="text-xs text-gray-400">
-              {lastTransformMs}ms
-            </span>
-          )}
+          <TransformBadge
+            status={status}
+            lastMs={lastTransformMs}
+            cached={wasCached}
+          />
           <button
             onClick={() => setEnabled(!isEnabled)}
             className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
@@ -71,6 +96,16 @@ export function Sidebar() {
 
         <Tabs.Content value="home" className="flex-1 overflow-y-auto p-4">
           <div className="space-y-4">
+            {/* Status banner */}
+            {error && (
+              <div className="rounded-xl bg-red-50 border border-red-200 p-3">
+                <p className="text-sm text-red-700">{error}</p>
+                <p className="text-xs text-red-500 mt-1">
+                  Make sure the API (localhost:8787) and AI service (localhost:3001) are running.
+                </p>
+              </div>
+            )}
+
             <div className="rounded-xl bg-violet-50 p-4">
               <h3 className="text-sm font-medium text-violet-900">
                 How Ivy works
@@ -80,6 +115,7 @@ export function Sidebar() {
                 preferences. Highlight any text to ask questions about it.
               </p>
             </div>
+
             <div className="rounded-xl border border-gray-200 p-4">
               <h3 className="text-sm font-medium text-gray-900">
                 Quick Actions
@@ -87,12 +123,22 @@ export function Sidebar() {
               <div className="mt-3 space-y-2">
                 <button
                   onClick={() => {
-                    chrome.runtime.sendMessage({ type: "TRANSFORM_PAGE", payload: {} });
+                    chrome.runtime.sendMessage({
+                      type: "TRANSFORM_PAGE",
+                      payload: {},
+                    });
                   }}
-                  disabled={!isEnabled}
-                  className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-gray-50 transition-colors disabled:opacity-50"
+                  disabled={!isEnabled || status === "transforming"}
+                  className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-gray-50 transition-colors disabled:opacity-50 flex items-center justify-between"
                 >
-                  Simplify this page
+                  <span>
+                    {status === "transforming"
+                      ? "Simplifying..."
+                      : "Simplify this page"}
+                  </span>
+                  {status === "transforming" && (
+                    <span className="w-4 h-4 border-2 border-violet-300 border-t-violet-600 rounded-full animate-spin" />
+                  )}
                 </button>
                 <button
                   disabled
@@ -102,20 +148,58 @@ export function Sidebar() {
                 </button>
               </div>
             </div>
+
+            {status === "done" && transformedCount > 0 && (
+              <div className="rounded-xl bg-green-50 border border-green-200 p-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-green-700">
+                    Simplified {transformedCount} section{transformedCount !== 1 ? "s" : ""}
+                    {lastTransformMs ? ` in ${lastTransformMs}ms` : ""}
+                    {wasCached ? " (cached)" : ""}
+                  </p>
+                  <button
+                    onClick={() => {
+                      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                        if (tabs[0]?.id) {
+                          chrome.tabs.sendMessage(tabs[0].id, {
+                            type: "UNDO_TRANSFORMS",
+                            payload: {},
+                          });
+                        }
+                      });
+                      reset();
+                    }}
+                    className="text-xs text-green-600 hover:text-green-800 underline ml-2 whitespace-nowrap"
+                  >
+                    Undo
+                  </button>
+                </div>
+                <p className="text-xs text-green-600 mt-1">
+                  Simplified sections have a purple left border. Hover to see the label.
+                </p>
+              </div>
+            )}
+            {status === "done" && transformedCount === 0 && (
+              <div className="rounded-xl bg-yellow-50 border border-yellow-200 p-3">
+                <p className="text-sm text-yellow-700">
+                  No sections needed simplification on this page.
+                </p>
+              </div>
+            )}
           </div>
         </Tabs.Content>
 
         <Tabs.Content value="benefits" className="flex-1 overflow-y-auto p-4">
           <div className="flex flex-col items-center justify-center h-full text-center">
             <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
-              <span className="text-2xl">🔍</span>
+              <span className="text-2xl text-gray-400">?</span>
             </div>
             <h3 className="text-sm font-medium text-gray-900">
               Benefits Discovery
             </h3>
             <p className="mt-1 text-sm text-gray-500 max-w-[240px]">
-              Coming in Phase 3. Ivy will help you find government benefits
-              you may be eligible for.
+              Coming in Phase 3. Ivy will help you find government benefits you
+              may be eligible for.
             </p>
           </div>
         </Tabs.Content>
@@ -126,4 +210,33 @@ export function Sidebar() {
       </Tabs.Root>
     </div>
   );
+}
+
+function TransformBadge({
+  status,
+  lastMs,
+  cached,
+}: {
+  status: string;
+  lastMs: number | null;
+  cached: boolean;
+}) {
+  if (status === "transforming") {
+    return (
+      <span className="text-xs text-violet-600 animate-pulse">
+        Transforming...
+      </span>
+    );
+  }
+  if (status === "done" && lastMs !== null) {
+    return (
+      <span className="text-xs text-gray-400">
+        {lastMs}ms{cached ? " (cached)" : ""}
+      </span>
+    );
+  }
+  if (status === "error") {
+    return <span className="text-xs text-red-500">Error</span>;
+  }
+  return null;
 }

@@ -15,27 +15,58 @@ export default defineContentScript({
 
     // ── Page Content Extraction ──
 
+    function getUniqueSelector(el: Element): string {
+      // Use ID if available
+      if (el.id) return `#${CSS.escape(el.id)}`;
+
+      // Build a path using nth-child
+      const parts: string[] = [];
+      let current: Element | null = el;
+      while (current && current !== document.body) {
+        const tag = current.tagName.toLowerCase();
+        const parent = current.parentElement;
+        if (!parent) break;
+
+        const siblings = Array.from(parent.children).filter(
+          (s) => s.tagName === current!.tagName
+        );
+        if (siblings.length > 1) {
+          const idx = siblings.indexOf(current) + 1;
+          parts.unshift(`${tag}:nth-of-type(${idx})`);
+        } else {
+          parts.unshift(tag);
+        }
+        current = parent;
+      }
+      return parts.join(" > ");
+    }
+
     function extractPageRegions(): PageRegion[] {
       const regions: PageRegion[] = [];
-      const elements = document.querySelectorAll(
-        "h1,h2,h3,h4,h5,h6,p,article,section,form,table,ul,ol"
+      // Target main content areas, skip nav/header/footer
+      const mainContent =
+        document.querySelector("main, [role='main'], article, .content, #content") ??
+        document.body;
+
+      const elements = mainContent.querySelectorAll(
+        "h1,h2,h3,h4,h5,h6,p,ul,ol,table"
       );
 
-      elements.forEach((el, index) => {
+      elements.forEach((el) => {
         const text = el.textContent?.trim() ?? "";
-        if (text.length < 10) return;
+        if (text.length < 20) return;
+        // Skip elements nested inside another matched element (avoid duplicates)
+        if (el.parentElement?.closest("ul,ol,table") && (el.tagName === "UL" || el.tagName === "OL")) return;
 
         const tag = el.tagName.toLowerCase();
         let type: PageRegion["type"] = "unknown";
         if (tag.startsWith("h")) type = "heading";
-        else if (tag === "p" || tag === "article" || tag === "section")
-          type = "paragraph";
-        else if (tag === "form") type = "form";
+        else if (tag === "p") type = "paragraph";
         else if (tag === "table") type = "table";
         else if (tag === "ul" || tag === "ol") type = "list";
 
         regions.push({
-          selector: `${tag}:nth-of-type(${index + 1})`,
+          selector: getUniqueSelector(el),
           type,
           content: text.slice(0, 2000),
         });
@@ -55,35 +86,106 @@ export default defineContentScript({
 
     // ── DOM Transformations ──
 
+    // Store original content for undo
+    const originalContent = new Map<Element, string>();
+    let transformedCount = 0;
+
     function applyTransformInstructions(
       instructions: TransformResultMessage["payload"]["instructions"]
     ) {
+      transformedCount = 0;
+
+      // Inject Ivy highlight styles if not present
+      if (!document.getElementById("ivy-transform-styles")) {
+        const style = document.createElement("style");
+        style.id = "ivy-transform-styles";
+        style.textContent = `
+          .ivy-simplified {
+            border-left: 3px solid #7c3aed;
+            padding-left: 8px;
+            background: rgba(124, 58, 237, 0.04);
+            color: #1f2937 !important;
+            transition: background 0.3s;
+          }
+          .ivy-simplified:hover {
+            background: rgba(124, 58, 237, 0.08);
+          }
+          .ivy-simplified::after {
+            content: "Simplified by Ivy";
+            display: block;
+            font-size: 10px;
+            color: #7c3aed;
+            margin-top: 4px;
+            font-family: system-ui, sans-serif;
+            opacity: 0;
+            transition: opacity 0.2s;
+          }
+          .ivy-simplified:hover::after {
+            opacity: 1;
+          }
+          .ivy-tooltip {
+            border-bottom: 1px dashed #7c3aed;
+            cursor: help;
+            position: relative;
+          }
+          .ivy-tooltip:hover::after {
+            content: attr(data-ivy-tip);
+            position: absolute;
+            bottom: 100%;
+            left: 0;
+            background: #1f2937;
+            color: white;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            line-height: 1.4;
+            max-width: 280px;
+            white-space: normal;
+            z-index: 2147483647;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            font-family: system-ui, sans-serif;
+          }
+        `;
+        document.head.appendChild(style);
+      }
+
       for (const inst of instructions) {
         try {
           const elements = document.querySelectorAll(inst.selector);
           elements.forEach((el) => {
+            // Save original content for undo
+            if (!originalContent.has(el)) {
+              originalContent.set(el, el.innerHTML);
+            }
+
             switch (inst.action) {
-              case "replace":
-                el.innerHTML = inst.value;
+              case "replace": {
+                // Use innerHTML if value contains HTML tags, textContent otherwise
+                if (/<[a-z][\s\S]*>/i.test(inst.value)) {
+                  el.innerHTML = inst.value;
+                } else {
+                  el.textContent = inst.value;
+                }
+                (el as HTMLElement).classList.add("ivy-simplified");
+                transformedCount++;
                 break;
-              case "wrap":
-                el.innerHTML = inst.value;
-                break;
+              }
               case "annotate": {
                 const tooltip = document.createElement("span");
                 tooltip.className = "ivy-tooltip";
                 tooltip.setAttribute("data-ivy-tip", inst.value);
-                tooltip.style.cssText =
-                  "border-bottom:1px dashed #7c3aed;cursor:help;";
                 el.parentNode?.replaceChild(tooltip, el);
                 tooltip.appendChild(el);
+                transformedCount++;
                 break;
               }
               case "style":
                 (el as HTMLElement).style.cssText += inst.value;
                 break;
               case "remove":
-                el.remove();
+                (el as HTMLElement).style.display = "none";
+                (el as HTMLElement).classList.add("ivy-simplified");
+                transformedCount++;
                 break;
             }
           });
@@ -91,6 +193,25 @@ export default defineContentScript({
           // Selector may not match; skip gracefully
         }
       }
+
+      // Notify the sidebar how many sections were transformed
+      chrome.runtime.sendMessage({
+        type: "TRANSFORM_STATUS",
+        payload: {
+          status: "done",
+          transformedCount,
+          processingMs: 0,
+        },
+      }).catch(() => {});
+    }
+
+    function undoTransforms() {
+      originalContent.forEach((html, el) => {
+        el.innerHTML = html;
+        (el as HTMLElement).classList.remove("ivy-simplified");
+      });
+      originalContent.clear();
+      transformedCount = 0;
     }
 
     // ── CSS Accessibility Adjustments ──
@@ -150,17 +271,21 @@ export default defineContentScript({
       `;
 
       floatingButton.addEventListener("click", () => {
-        const context =
+        const selContext =
           window.getSelection()?.anchorNode?.parentElement?.textContent?.slice(
             0,
             500
           ) ?? "";
 
+        // Show loading state
+        floatingButton!.textContent = "Thinking...";
+        floatingButton!.style.opacity = "0.7";
+        floatingButton!.style.pointerEvents = "none";
+
         chrome.runtime.sendMessage({
           type: "HIGHLIGHT_ASK",
-          payload: { selectedText, context },
+          payload: { selectedText, context: selContext },
         });
-        removeFloatingButton();
       });
 
       document.body.appendChild(floatingButton);
@@ -173,7 +298,10 @@ export default defineContentScript({
       }
     }
 
-    document.addEventListener("mouseup", () => {
+    document.addEventListener("mouseup", (e) => {
+      // Don't dismiss if clicking the Ask Ivy button
+      if (floatingButton?.contains(e.target as Node)) return;
+
       const selection = window.getSelection();
       const text = selection?.toString().trim() ?? "";
 
@@ -213,10 +341,18 @@ export default defineContentScript({
           break;
 
         case "HIGHLIGHT_ANSWER": {
+          removeFloatingButton();
           const answer = (msg as HighlightAnswerMessage).payload;
           showAnswerTooltip(answer.answer);
           break;
         }
+
+        case "ERROR":
+          removeFloatingButton();
+          if (msg.payload.code === "EXPLAIN_FAILED") {
+            showAnswerTooltip(msg.payload.message);
+          }
+          break;
 
         case "PREFERENCES_UPDATED":
           applyAccessibilityCSS(msg.payload);
@@ -227,7 +363,12 @@ export default defineContentScript({
           if (!ivyEnabled) {
             const styleEl = document.getElementById("ivy-accessibility");
             if (styleEl) styleEl.textContent = "";
+            undoTransforms();
           }
+          break;
+
+        case "UNDO_TRANSFORMS":
+          undoTransforms();
           break;
       }
     });

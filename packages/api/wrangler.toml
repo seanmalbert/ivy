@@ -4,9 +4,10 @@ compatibility_date = "2024-12-01"
 
 [vars]
 ENVIRONMENT = "development"
+AI_SERVICE_URL = "http://localhost:3001"
 
-# Uncomment and configure when ready:
-# [[d1_databases]]
-# binding = "DB"
-# database_name = "ivy"
-# database_id = ""
+# Set these as secrets via `wrangler secret put`:
+# DATABASE_URL
+# UPSTASH_REDIS_REST_URL
+# UPSTASH_REDIS_REST_TOKEN
+# CLERK_SECRET_KEY

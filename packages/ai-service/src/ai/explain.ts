@@ -11,7 +11,7 @@ export async function explainText(
   const grade = READING_LEVEL_GRADES[readingLevel ?? "middle-school"] ?? 7;
 
   const message = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: "claude-haiku-4-5",
     max_tokens: 1024,
     system: `You are Ivy, a friendly assistant that explains things simply. Write at a grade ${grade} reading level. Be concise (2-4 sentences). If the text contains jargon, define it. If it's a legal or government term, explain what it means for everyday life.`,
     messages: [

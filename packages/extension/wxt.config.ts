@@ -6,16 +6,13 @@ export default defineConfig({
   webExt: {
     chromiumProfile: path.resolve(__dirname, ".chrome-profile"),
     keepProfileChanges: true,
-    chromiumArgs: [
-      "--disable-blink-features=AutomationControlled",
-    ],
     startUrls: ["https://www.ssa.gov/benefits/"],
   },
   manifest: {
     name: "Ivy - Personal Web Assistant",
     description:
       "AI-powered assistant that adapts web content to your needs. Simplifies text, discovers benefits, and guides you through forms.",
-    permissions: ["activeTab", "storage", "sidePanel"],
+    permissions: ["activeTab", "storage", "sidePanel", "scripting"],
     host_permissions: [],
     side_panel: {
       default_path: "sidepanel.html",

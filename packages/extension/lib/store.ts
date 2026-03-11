@@ -78,20 +78,29 @@ export const useAuthStore = create<AuthState>()((set) => ({
 
 // ── Transform Store ──
 
+type TransformStatus = "idle" | "transforming" | "done" | "error";
+
 interface TransformState {
-  isTransforming: boolean;
+  status: TransformStatus;
   lastTransformMs: number | null;
+  wasCached: boolean;
+  transformedCount: number;
   error: string | null;
-  setTransforming: (isTransforming: boolean) => void;
-  setLastTransformMs: (ms: number) => void;
-  setError: (error: string | null) => void;
+  setStatus: (status: TransformStatus) => void;
+  setResult: (ms: number, cached: boolean, count?: number) => void;
+  setError: (error: string) => void;
+  reset: () => void;
 }
 
 export const useTransformStore = create<TransformState>()((set) => ({
-  isTransforming: false,
+  status: "idle",
   lastTransformMs: null,
+  wasCached: false,
+  transformedCount: 0,
   error: null,
-  setTransforming: (isTransforming) => set({ isTransforming }),
-  setLastTransformMs: (ms) => set({ lastTransformMs: ms }),
-  setError: (error) => set({ error }),
+  setStatus: (status) => set({ status, error: null }),
+  setResult: (ms, cached, count) =>
+    set({ status: "done", lastTransformMs: ms, wasCached: cached, transformedCount: count ?? 0, error: null }),
+  setError: (error) => set({ status: "error", error }),
+  reset: () => set({ status: "idle", lastTransformMs: null, wasCached: false, transformedCount: 0, error: null }),
 }));

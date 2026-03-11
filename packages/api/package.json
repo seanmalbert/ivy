@@ -12,9 +12,11 @@
   },
   "dependencies": {
     "@ivy/shared": "workspace:*",
-    "hono": "^4.7.0",
+    "@neondatabase/serverless": "^0.10.0",
+    "@upstash/qstash": "^2.9.0",
+    "@upstash/redis": "^1.36.4",
     "drizzle-orm": "^0.39.0",
-    "@neondatabase/serverless": "^0.10.0"
+    "hono": "^4.7.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250214.0",
