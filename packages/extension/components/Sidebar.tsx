@@ -130,7 +130,7 @@ export function Sidebar() {
               <div className="rounded-xl bg-red-50 border border-red-200 p-3">
                 <p className="text-sm text-red-700">{error}</p>
                 <p className="text-xs text-red-500 mt-1">
-                  Make sure the API (localhost:8787) and AI service (localhost:3001) are running.
+                  Try again in a moment. If the issue persists, check that the server is reachable.
                 </p>
               </div>
             )}

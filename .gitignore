@@ -8,3 +8,6 @@ dist/
 .env.*.local
 .DS_Store
 .wrangler/
+chrome-mv3/
+ivy-extension.zip
+.chrome-profile/
