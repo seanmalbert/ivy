@@ -10,7 +10,28 @@ AI browser extension that takes real human inputs to personalize content, flag e
 - **Form Guidance** -- Step-by-step explanations for government forms (planned)
 - **Feedback Loop** -- Users provide natural language feedback on websites; aggregated insights can be supplied to site owners to improve accessibility (planned)
 
-## Screenshots
+## Wireframes
+
+Design wireframes for planned features, including the natural language setup flow, contextual text selection, and the government agency dashboard for aggregated user feedback and accessibility insights.
+
+### Extension UI
+
+<p align="center">
+  <img src="wireframes/Setup - natural language prompt.png" width="400" alt="Wireframe: setup with natural language prompt on government site" />
+  <img src="wireframes/Text selection - natural language prompt.png" width="400" alt="Wireframe: text selection with natural language prompt" />
+</p>
+
+### Government Dashboard
+
+A dashboard for government website owners showing accessibility scores, user behavior analytics, page-level insights, and commonly asked questions aggregated from Ivy users.
+
+<p align="center">
+  <img src="wireframes/Government dashboard.png" width="280" alt="Wireframe: government dashboard overview with performance scores" />
+  <img src="wireframes/Government dashboard - insights expanded.png" width="280" alt="Wireframe: dashboard with page insights expanded" />
+  <img src="wireframes/Government dashboard - questions expanded.png" width="280" alt="Wireframe: dashboard with commonly asked questions expanded" />
+</p>
+
+## Screenshots from prototype
 
 ### Onboarding
 
@@ -57,27 +78,6 @@ Fill out a short eligibility profile and Ivy matches you against federal benefit
 <p align="center">
   <img src="screenshots/benefits-form.png" width="280" alt="Benefits eligibility form" />
   <img src="screenshots/benefits-results.png" width="280" alt="Benefits results showing SNAP, LIHEAP, Medicaid" />
-</p>
-
-## Wireframes
-
-Design wireframes for planned features, including the natural language setup flow, contextual text selection, and the government agency dashboard for aggregated user feedback and accessibility insights.
-
-### Extension UI
-
-<p align="center">
-  <img src="wireframes/Setup - natural language prompt.png" width="400" alt="Wireframe: setup with natural language prompt on government site" />
-  <img src="wireframes/Text selection - natural language prompt.png" width="400" alt="Wireframe: text selection with natural language prompt" />
-</p>
-
-### Government Dashboard
-
-A dashboard for government website owners showing accessibility scores, user behavior analytics, page-level insights, and commonly asked questions aggregated from Ivy users.
-
-<p align="center">
-  <img src="wireframes/Government dashboard.png" width="280" alt="Wireframe: government dashboard overview with performance scores" />
-  <img src="wireframes/Government dashboard - insights expanded.png" width="280" alt="Wireframe: dashboard with page insights expanded" />
-  <img src="wireframes/Government dashboard - questions expanded.png" width="280" alt="Wireframe: dashboard with commonly asked questions expanded" />
 </p>
 
 ## Architecture
