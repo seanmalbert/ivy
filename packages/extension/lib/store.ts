@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { DEFAULT_PREFERENCES, STORAGE_KEYS } from "@ivy/shared";
-import type { UserPreferences } from "@ivy/shared";
+import type { UserPreferences, BenefitRecommendation } from "@ivy/shared";
 
 // ── Chrome storage adapter for Zustand ──
 
@@ -91,6 +91,88 @@ interface TransformState {
   setError: (error: string) => void;
   reset: () => void;
 }
+
+// ── Eligibility Profile Store ──
+
+export interface EligibilityProfileState {
+  incomeBracket: string | null;
+  state: string | null;
+  householdSize: number | null;
+  hasDisability: boolean | null;
+  veteranStatus: boolean | null;
+  ageBracket: string | null;
+  setField: (field: string, value: string | number | boolean | null) => void;
+  reset: () => void;
+}
+
+const eligibilityStorage = createJSONStorage<EligibilityProfileState>(() => ({
+  getItem: async (key: string) => {
+    const result = await chrome.storage.local.get(key);
+    return result[key] ?? null;
+  },
+  setItem: async (key: string, value: string) => {
+    await chrome.storage.local.set({ [key]: value });
+  },
+  removeItem: async (key: string) => {
+    await chrome.storage.local.remove(key);
+  },
+}));
+
+export const useEligibilityStore = create<EligibilityProfileState>()(
+  persist(
+    (set) => ({
+      incomeBracket: null,
+      state: null,
+      householdSize: null,
+      hasDisability: null,
+      veteranStatus: null,
+      ageBracket: null,
+      setField: (field, value) => set({ [field]: value }),
+      reset: () =>
+        set({
+          incomeBracket: null,
+          state: null,
+          householdSize: null,
+          hasDisability: null,
+          veteranStatus: null,
+          ageBracket: null,
+        }),
+    }),
+    {
+      name: "ivy-eligibility-profile",
+      storage: eligibilityStorage,
+    }
+  )
+);
+
+// ── Benefits Store ──
+
+type BenefitsStatus = "idle" | "evaluating" | "done" | "error";
+
+interface BenefitsState {
+  status: BenefitsStatus;
+  recommendations: BenefitRecommendation[];
+  processingMs: number | null;
+  error: string | null;
+  setStatus: (status: BenefitsStatus) => void;
+  setResults: (recommendations: BenefitRecommendation[], ms: number) => void;
+  setError: (error: string) => void;
+  reset: () => void;
+}
+
+export const useBenefitsStore = create<BenefitsState>()((set) => ({
+  status: "idle",
+  recommendations: [],
+  processingMs: null,
+  error: null,
+  setStatus: (status) => set({ status, error: null }),
+  setResults: (recommendations, ms) =>
+    set({ status: "done", recommendations, processingMs: ms, error: null }),
+  setError: (error) => set({ status: "error", error, recommendations: [] }),
+  reset: () => set({ status: "idle", recommendations: [], processingMs: null, error: null }),
+}));
+
+// ── Transform Store ──
 
 export const useTransformStore = create<TransformState>()((set) => ({
   status: "idle",

@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@ivy/shared": "workspace:*",
+    "@ivy/benefits-engine": "workspace:*",
     "@anthropic-ai/sdk": "^0.39.0",
     "hono": "^4.7.0",
     "@hono/node-server": "^1.14.0"

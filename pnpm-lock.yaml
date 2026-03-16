@@ -162,6 +162,9 @@ importers:
       '@hono/node-server':
         specifier: ^1.14.0
         version: 1.19.11(hono@4.12.5)
+      '@ivy/benefits-engine':
+        specifier: workspace:*
+        version: link:../benefits-engine
       '@ivy/shared':
         specifier: workspace:*
         version: link:../shared

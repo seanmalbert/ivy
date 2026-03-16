@@ -4,6 +4,8 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { transformContent } from "./ai/transform.js";
 import { explainText } from "./ai/explain.js";
+import { rankAndExplainBenefits } from "./ai/benefits.js";
+import { evaluateEligibility, FEDERAL_RULES } from "@ivy/benefits-engine";
 
 const app = new Hono();
 
@@ -94,6 +96,53 @@ app.post("/api/explain", async (c) => {
       {
         success: false,
         error: { code: "EXPLAIN_FAILED", message: "Explanation failed" },
+      },
+      500
+    );
+  }
+});
+
+// ── Benefits Evaluation ──
+
+app.post("/api/benefits/evaluate", async (c) => {
+  const body = await c.req.json<{
+    profile: {
+      incomeBracket: string | null;
+      state: string | null;
+      householdSize: number | null;
+      hasDisability: boolean | null;
+      veteranStatus: boolean | null;
+      ageBracket: string | null;
+    };
+    readingLevel?: string;
+  }>();
+
+  const startTime = Date.now();
+
+  try {
+    // Step 1: Deterministic rules engine
+    const eligibilityResults = evaluateEligibility(body.profile, FEDERAL_RULES);
+
+    // Step 2: AI ranking and plain-language explanations
+    const recommendations = await rankAndExplainBenefits(
+      eligibilityResults,
+      body.profile,
+      body.readingLevel
+    );
+
+    return c.json({
+      success: true,
+      data: {
+        recommendations,
+        processingMs: Date.now() - startTime,
+      },
+    });
+  } catch (err) {
+    console.error("Benefits evaluation error:", err);
+    return c.json(
+      {
+        success: false,
+        error: { code: "BENEFITS_FAILED", message: "Benefits evaluation failed" },
       },
       500
     );

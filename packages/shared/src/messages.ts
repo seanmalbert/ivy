@@ -3,7 +3,7 @@
  * Used between: Service Worker ↔ Content Script ↔ Sidebar ↔ Popup
  */
 
-import type { TransformInstruction, UserPreferences, PageRegion } from "./types.js";
+import type { TransformInstruction, UserPreferences, PageRegion, BenefitRecommendation } from "./types.js";
 
 // ── Message types ──
 
@@ -17,6 +17,8 @@ export type IvyMessage =
   | GetPageContentMessage
   | PageContentMessage
   | AuthStateMessage
+  | EvaluateBenefitsMessage
+  | BenefitsResultMessage
   | ErrorMessage;
 
 // ── Transform messages ──
@@ -98,6 +100,30 @@ export interface AuthStateMessage {
   payload: {
     isAuthenticated: boolean;
     userId?: string;
+  };
+}
+
+// ── Benefits ──
+
+export interface EvaluateBenefitsMessage {
+  type: "EVALUATE_BENEFITS";
+  payload: {
+    profile: {
+      incomeBracket: string | null;
+      state: string | null;
+      householdSize: number | null;
+      hasDisability: boolean | null;
+      veteranStatus: boolean | null;
+      ageBracket: string | null;
+    };
+  };
+}
+
+export interface BenefitsResultMessage {
+  type: "BENEFITS_RESULT";
+  payload: {
+    recommendations: BenefitRecommendation[];
+    processingMs: number;
   };
 }
 

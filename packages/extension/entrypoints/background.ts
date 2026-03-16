@@ -205,6 +205,11 @@ export default defineBackground(() => {
           return true;
         }
 
+        case "EVALUATE_BENEFITS": {
+          handleEvaluateBenefits(message.payload.profile).then(sendResponse);
+          return true;
+        }
+
         case "PREFERENCES_UPDATED":
           broadcastToTabs(message);
           trackEvent("preference_changed", message.payload as Record<string, unknown>);
@@ -371,6 +376,71 @@ export default defineBackground(() => {
           message: onDeviceResult ? undefined : "No transformations generated",
           processingMs: totalMs,
         },
+      }).catch(() => {});
+    }
+  }
+
+  async function handleEvaluateBenefits(profile: {
+    incomeBracket: string | null;
+    state: string | null;
+    householdSize: number | null;
+    hasDisability: boolean | null;
+    veteranStatus: boolean | null;
+    ageBracket: string | null;
+  }) {
+    // Notify sidebar that evaluation started
+    chrome.runtime.sendMessage({
+      type: "BENEFITS_STATUS",
+      payload: { status: "evaluating" },
+    }).catch(() => {});
+
+    try {
+      const preferences = await getPreferences();
+      const readingLevel = preferences.readingLevel as string | undefined;
+
+      const response = await fetch(`${API_BASE_URL}/api/benefits/evaluate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profile, readingLevel }),
+      });
+
+      if (!response.ok) {
+        chrome.runtime.sendMessage({
+          type: "BENEFITS_STATUS",
+          payload: { status: "error", message: "Benefits evaluation failed" },
+        }).catch(() => {});
+        return;
+      }
+
+      const result = (await response.json()) as {
+        success: boolean;
+        data?: { recommendations: unknown[]; processingMs: number };
+      };
+
+      if (result.success && result.data) {
+        chrome.runtime.sendMessage({
+          type: "BENEFITS_STATUS",
+          payload: {
+            status: "done",
+            recommendations: result.data.recommendations,
+            processingMs: result.data.processingMs,
+          },
+        }).catch(() => {});
+
+        trackEvent("benefits_evaluated", {
+          resultCount: result.data.recommendations.length,
+          processingMs: result.data.processingMs,
+        });
+      } else {
+        chrome.runtime.sendMessage({
+          type: "BENEFITS_STATUS",
+          payload: { status: "error", message: "No results returned" },
+        }).catch(() => {});
+      }
+    } catch {
+      chrome.runtime.sendMessage({
+        type: "BENEFITS_STATUS",
+        payload: { status: "error", message: "Could not connect to benefits service" },
       }).catch(() => {});
     }
   }

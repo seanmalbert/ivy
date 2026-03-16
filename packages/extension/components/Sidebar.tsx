@@ -1,13 +1,17 @@
 import { useEffect } from "react";
 import * as Tabs from "@radix-ui/react-tabs";
-import { usePreferencesStore, useTransformStore } from "../lib/store";
+import { usePreferencesStore, useTransformStore, useBenefitsStore, useEligibilityStore } from "../lib/store";
 import { PreferenceChat } from "./PreferenceChat";
 import { PreferencesPanel } from "./PreferencesPanel";
+import { EligibilityForm } from "./EligibilityForm";
+import { BenefitsResults } from "./BenefitsResults";
 
 export function Sidebar() {
   const { isOnboarded, isEnabled, setEnabled } = usePreferencesStore();
   const { status, lastTransformMs, wasCached, transformedCount, error, setResult, setStatus, setError, reset } =
     useTransformStore();
+  const benefits = useBenefitsStore();
+  const eligibility = useEligibilityStore();
 
   // Listen for transform status updates from the service worker
   useEffect(() => {
@@ -31,11 +35,29 @@ export function Sidebar() {
             break;
         }
       }
+
+      if (m.type === "BENEFITS_STATUS" && m.payload) {
+        const p = m.payload;
+        switch (p.status) {
+          case "evaluating":
+            benefits.setStatus("evaluating");
+            break;
+          case "done":
+            benefits.setResults(
+              (p.recommendations as unknown[]) as import("@ivy/shared").BenefitRecommendation[],
+              (p.processingMs as number) ?? 0
+            );
+            break;
+          case "error":
+            benefits.setError((p.message as string) ?? "Benefits evaluation failed");
+            break;
+        }
+      }
     };
 
     chrome.runtime.onMessage.addListener(listener);
     return () => chrome.runtime.onMessage.removeListener(listener);
-  }, [setResult, setStatus, setError]);
+  }, [setResult, setStatus, setError, benefits.setStatus, benefits.setResults, benefits.setError]);
 
   if (!isOnboarded) {
     return (
@@ -87,6 +109,7 @@ export function Sidebar() {
             <Tabs.Trigger
               key={tab}
               value={tab}
+              data-value={tab}
               className="px-3 py-2 text-sm text-gray-500 capitalize border-b-2 border-transparent data-[state=active]:border-violet-600 data-[state=active]:text-violet-700 transition-colors"
             >
               {tab}
@@ -141,10 +164,15 @@ export function Sidebar() {
                   )}
                 </button>
                 <button
-                  disabled
-                  className="w-full text-left px-3 py-2 rounded-lg text-sm text-gray-400 cursor-not-allowed"
+                  onClick={() => {
+                    // Switch to benefits tab — user will fill form there
+                    const benefitsTab = document.querySelector('[data-value="benefits"]') as HTMLElement | null;
+                    benefitsTab?.click();
+                  }}
+                  disabled={!isEnabled}
+                  className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-gray-50 transition-colors disabled:opacity-50"
                 >
-                  Find benefits for me (coming soon)
+                  Find benefits for me
                 </button>
               </div>
             </div>
@@ -190,18 +218,46 @@ export function Sidebar() {
         </Tabs.Content>
 
         <Tabs.Content value="benefits" className="flex-1 overflow-y-auto p-4">
-          <div className="flex flex-col items-center justify-center h-full text-center">
-            <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
-              <span className="text-2xl text-gray-400">?</span>
+          {benefits.status === "done" && benefits.recommendations.length > 0 ? (
+            <BenefitsResults
+              recommendations={benefits.recommendations}
+              processingMs={benefits.processingMs}
+              onReset={benefits.reset}
+            />
+          ) : (
+            <div className="space-y-3">
+              {benefits.error && (
+                <div className="rounded-xl bg-red-50 border border-red-200 p-3">
+                  <p className="text-sm text-red-700">{benefits.error}</p>
+                </div>
+              )}
+              <EligibilityForm
+                isEvaluating={benefits.status === "evaluating"}
+                onSubmit={() => {
+                  chrome.runtime.sendMessage({
+                    type: "EVALUATE_BENEFITS",
+                    payload: {
+                      profile: {
+                        incomeBracket: eligibility.incomeBracket,
+                        state: eligibility.state,
+                        householdSize: eligibility.householdSize,
+                        hasDisability: eligibility.hasDisability,
+                        veteranStatus: eligibility.veteranStatus,
+                        ageBracket: eligibility.ageBracket,
+                      },
+                    },
+                  });
+                }}
+              />
+              {benefits.status === "done" && benefits.recommendations.length === 0 && (
+                <div className="rounded-xl bg-yellow-50 border border-yellow-200 p-3">
+                  <p className="text-sm text-yellow-700">
+                    No benefits matched your profile. Try updating your information or check back later.
+                  </p>
+                </div>
+              )}
             </div>
-            <h3 className="text-sm font-medium text-gray-900">
-              Benefits Discovery
-            </h3>
-            <p className="mt-1 text-sm text-gray-500 max-w-[240px]">
-              Coming in Phase 3. Ivy will help you find government benefits you
-              may be eligible for.
-            </p>
-          </div>
+          )}
         </Tabs.Content>
 
         <Tabs.Content value="settings" className="flex-1 overflow-y-auto">

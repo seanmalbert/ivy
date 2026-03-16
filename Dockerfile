@@ -6,6 +6,7 @@ WORKDIR /app
 # Copy workspace config
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/shared/package.json packages/shared/
+COPY packages/benefits-engine/package.json packages/benefits-engine/
 COPY packages/server/package.json packages/server/
 
 # Install dependencies
@@ -13,11 +14,12 @@ RUN pnpm install --frozen-lockfile
 
 # Copy source
 COPY packages/shared/ packages/shared/
+COPY packages/benefits-engine/ packages/benefits-engine/
 COPY packages/server/ packages/server/
 COPY tsconfig.base.json ./
 
 # Build
-RUN pnpm --filter @ivy/shared build && pnpm --filter @ivy/server build
+RUN pnpm --filter @ivy/shared build && pnpm --filter @ivy/benefits-engine build && pnpm --filter @ivy/server build
 
 # Run
 EXPOSE 3001
