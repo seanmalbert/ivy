@@ -41,6 +41,5 @@ COPY --from=build /app/packages/server/dist packages/server/dist
 COPY --from=build /app/package.json ./package.json
 
 ENV NODE_ENV=production
-EXPOSE 3001
-ENV PORT=3001
+# PORT is set by Railway at runtime; defaults to 3001 in code
 CMD ["node", "packages/server/dist/index.js"]
