@@ -10,6 +10,52 @@ AI browser extension that takes real human inputs to personalize content, flag e
 - **Form Guidance** -- Step-by-step explanations for government forms (planned)
 - **Feedback Loop** -- Users provide natural language feedback on websites; aggregated insights can be supplied to site owners to improve accessibility (planned)
 
+## Screenshots
+
+### Onboarding
+
+Ivy greets new users with a conversational setup flow, asking about reading comfort, jargon preferences, and visual needs.
+
+<p align="center">
+  <img src="screenshots/setup-tech-terms.png" width="280" alt="Onboarding: reading level and jargon preferences" />
+  <img src="screenshots/setup-visual.png" width="280" alt="Onboarding: visual adjustments" />
+  <img src="screenshots/setup-final.png" width="280" alt="Onboarding: custom needs" />
+</p>
+
+### Content Simplification
+
+Click "Simplify this page" and Ivy rewrites complex text at your reading level, with jargon tooltips. Simplified sections are marked with a purple left border.
+
+<p align="center">
+  <img src="screenshots/simplified-page-processing.png" width="280" alt="Simplification in progress" />
+  <img src="screenshots/ask-ivy-simplified-page.png" width="700" alt="Simplified SNAP benefits page on USA.gov" />
+</p>
+
+### Highlight-to-Ask
+
+Select any text on a page and click "Ask Ivy" for a plain-language explanation.
+
+<p align="center">
+  <img src="screenshots/ask-ivy-text-selection.png" width="700" alt="Text selected with Ask Ivy button" />
+  <img src="screenshots/ask-ivy-result.png" width="700" alt="Ivy explains the 20/40 Rule in plain language" />
+</p>
+
+### Benefits Discovery
+
+Fill out a short eligibility profile and Ivy matches you against federal benefit programs, ranked by likelihood with plain-language explanations.
+
+<p align="center">
+  <img src="screenshots/benefits-form.png" width="280" alt="Benefits eligibility form" />
+  <img src="screenshots/benefits-results.png" width="280" alt="Benefits results showing SNAP, LIHEAP, Medicaid" />
+</p>
+
+### Home & Settings
+
+<p align="center">
+  <img src="screenshots/home.png" width="280" alt="Ivy home tab with quick actions" />
+  <img src="screenshots/settings.png" width="280" alt="Settings panel with reading level, jargon, font size, contrast, motion" />
+</p>
+
 ## Architecture
 
 ```
