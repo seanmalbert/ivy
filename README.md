@@ -22,12 +22,22 @@ Ivy greets new users with a conversational setup flow, asking about reading comf
   <img src="screenshots/setup-final.png" width="280" alt="Onboarding: custom needs" />
 </p>
 
+### Home & Settings
+
+<p align="center">
+  <img src="screenshots/home.png" width="280" alt="Ivy home tab with quick actions" />
+  <img src="screenshots/settings.png" width="280" alt="Settings panel with reading level, jargon, font size, contrast, motion" />
+</p>
+
 ### Content Simplification
 
 Click "Simplify this page" and Ivy rewrites complex text at your reading level, with jargon tooltips. Simplified sections are marked with a purple left border.
 
 <p align="center">
   <img src="screenshots/simplified-page-processing.png" width="280" alt="Simplification in progress" />
+</p>
+
+<p align="center">
   <img src="screenshots/ask-ivy-simplified-page.png" width="700" alt="Simplified SNAP benefits page on USA.gov" />
 </p>
 
@@ -47,13 +57,6 @@ Fill out a short eligibility profile and Ivy matches you against federal benefit
 <p align="center">
   <img src="screenshots/benefits-form.png" width="280" alt="Benefits eligibility form" />
   <img src="screenshots/benefits-results.png" width="280" alt="Benefits results showing SNAP, LIHEAP, Medicaid" />
-</p>
-
-### Home & Settings
-
-<p align="center">
-  <img src="screenshots/home.png" width="280" alt="Ivy home tab with quick actions" />
-  <img src="screenshots/settings.png" width="280" alt="Settings panel with reading level, jargon, font size, contrast, motion" />
 </p>
 
 ## Architecture
