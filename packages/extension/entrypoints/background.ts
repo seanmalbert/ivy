@@ -223,7 +223,7 @@ export default defineBackground(() => {
 
         case "PREFERENCES_UPDATED":
           broadcastToTabs(message);
-          trackEvent("preference_changed", message.payload as Record<string, unknown>);
+          trackEvent("preference_changed", message.payload as unknown as Record<string, unknown>);
           break;
 
         case "TOGGLE_IVY":

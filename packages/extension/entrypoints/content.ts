@@ -24,12 +24,13 @@ export default defineContentScript({
       const parts: string[] = [];
       let current: Element | null = el;
       while (current && current !== document.body) {
-        const tag = current.tagName.toLowerCase();
-        const parent = current.parentElement;
+        const cur: Element = current;
+        const tag = cur.tagName.toLowerCase();
+        const parent: Element | null = cur.parentElement;
         if (!parent) break;
 
         const siblings = Array.from(parent.children).filter(
-          (s) => s.tagName === current!.tagName
+          (s: Element) => s.tagName === cur.tagName
         );
         if (siblings.length > 1) {
           const idx = siblings.indexOf(current) + 1;

@@ -4,6 +4,7 @@
  */
 
 import type { TransformInstruction, UserPreferences, PageRegion, BenefitRecommendation } from "./types.js";
+export type { PageRegion } from "./types.js";
 
 // ── Message types ──
 
@@ -19,6 +20,7 @@ export type IvyMessage =
   | AuthStateMessage
   | EvaluateBenefitsMessage
   | BenefitsResultMessage
+  | UndoTransformsMessage
   | ErrorMessage;
 
 // ── Transform messages ──
@@ -125,6 +127,13 @@ export interface BenefitsResultMessage {
     recommendations: BenefitRecommendation[];
     processingMs: number;
   };
+}
+
+// ── Undo ──
+
+export interface UndoTransformsMessage {
+  type: "UNDO_TRANSFORMS";
+  payload: Record<string, never>;
 }
 
 // ── Error ──
