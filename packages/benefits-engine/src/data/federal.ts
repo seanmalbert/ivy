@@ -1,5 +1,5 @@
-import type { Benefit } from "@ivy/shared";
-import type { BenefitRule, EligibilityInput } from "../rules.js";
+import type { Benefit, EligibilityInput } from "@ivy/shared";
+import type { BenefitRule } from "../rules.js";
 
 // ── Federal Benefit Definitions ──
 

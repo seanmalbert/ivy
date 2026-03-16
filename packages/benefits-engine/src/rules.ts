@@ -1,13 +1,4 @@
-import type { Benefit, EligibilityStatus } from "@ivy/shared";
-
-export interface EligibilityInput {
-  incomeBracket: string | null;
-  state: string | null;
-  householdSize: number | null;
-  hasDisability: boolean | null;
-  veteranStatus: boolean | null;
-  ageBracket: string | null;
-}
+import type { Benefit, EligibilityInput, EligibilityStatus } from "@ivy/shared";
 
 export interface BenefitRule {
   benefit: Benefit;

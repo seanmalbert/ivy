@@ -36,6 +36,9 @@ export interface EligibilityProfile {
   ageBracket: string | null;
 }
 
+/** Input for the benefits eligibility engine (EligibilityProfile without userId) */
+export type EligibilityInput = Omit<EligibilityProfile, "userId">;
+
 // ── Content Transformation ──
 
 export interface TransformInstruction {

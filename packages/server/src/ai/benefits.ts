@@ -1,21 +1,13 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { Benefit, EligibilityStatus, BenefitRecommendation } from "@ivy/shared";
+import type { EligibilityInput, BenefitRecommendation } from "@ivy/shared";
+import { READING_LEVEL_GRADES } from "@ivy/shared";
+import type { EligibilityResult } from "@ivy/benefits-engine";
 
-const anthropic = new Anthropic({ timeout: 30_000 });
+const AI_TIMEOUT_MS = 30_000;
+const BENEFITS_MAX_TOKENS = 2048;
+const MODEL = "claude-haiku-4-5";
 
-interface EligibilityResultInput {
-  benefit: Benefit;
-  eligibility: EligibilityStatus;
-}
-
-interface ProfileContext {
-  incomeBracket: string | null;
-  state: string | null;
-  householdSize: number | null;
-  hasDisability: boolean | null;
-  veteranStatus: boolean | null;
-  ageBracket: string | null;
-}
+const anthropic = new Anthropic({ timeout: AI_TIMEOUT_MS });
 
 /**
  * Uses Claude to rank benefits by impact and generate plain-language explanations.
@@ -23,16 +15,13 @@ interface ProfileContext {
  * used for ranking and explanation (low-stakes).
  */
 export async function rankAndExplainBenefits(
-  results: EligibilityResultInput[],
-  profile: ProfileContext,
+  results: EligibilityResult[],
+  profile: EligibilityInput,
   readingLevel?: string
 ): Promise<BenefitRecommendation[]> {
   if (results.length === 0) return [];
 
-  const gradeTarget = readingLevel === "elementary" ? 4
-    : readingLevel === "middle-school" ? 7
-    : readingLevel === "college" ? 12
-    : 10;
+  const gradeTarget = READING_LEVEL_GRADES[readingLevel ?? "high-school"] ?? 10;
 
   const profileSummary = [
     profile.incomeBracket ? `Income: ${profile.incomeBracket}` : null,
@@ -48,8 +37,8 @@ export async function rankAndExplainBenefits(
   )).join("\n");
 
   const message = await anthropic.messages.create({
-    model: "claude-haiku-4-5",
-    max_tokens: 2048,
+    model: MODEL,
+    max_tokens: BENEFITS_MAX_TOKENS,
     system: `You are Ivy, a friendly assistant that helps people understand government benefits in plain language.
 
 You will receive a list of benefits a person may be eligible for, along with their profile. For each benefit:
@@ -106,7 +95,7 @@ No markdown fences, no commentary.`,
 }
 
 /** Fallback if AI ranking fails — return results with generic explanations */
-function fallbackResults(results: EligibilityResultInput[]): BenefitRecommendation[] {
+function fallbackResults(results: EligibilityResult[]): BenefitRecommendation[] {
   return results.map((r) => ({
     benefitId: r.benefit.id,
     benefit: r.benefit,
