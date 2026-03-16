@@ -3,9 +3,16 @@ import type { IvyMessage, PageContentMessage } from "@ivy/shared/messages";
 import { STORAGE_KEYS } from "@ivy/shared";
 import type { TransformInstruction } from "@ivy/shared";
 
-// Use Vite env var if set (production build), otherwise localhost for dev
+// Use Vite env vars if set (production build), otherwise localhost for dev
 const API_BASE_URL =
   import.meta.env.VITE_API_URL ?? "http://localhost:3001";
+const API_KEY = import.meta.env.VITE_API_KEY ?? "";
+
+function apiHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (API_KEY) headers["Authorization"] = `Bearer ${API_KEY}`;
+  return headers;
+}
 
 export default defineBackground(() => {
   // ── Side Panel Setup ──
@@ -95,7 +102,7 @@ export default defineBackground(() => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/transform`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: apiHeaders(),
         body: JSON.stringify({
           url,
           content: content.slice(0, 50000),
@@ -126,7 +133,7 @@ export default defineBackground(() => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/explain`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: apiHeaders(),
         body: JSON.stringify({ text, context, readingLevel }),
       });
 
@@ -152,7 +159,7 @@ export default defineBackground(() => {
     try {
       await fetch(`${API_BASE_URL}/api/events`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: apiHeaders(),
         body: JSON.stringify({
           userId: "anonymous", // TODO: Replace with Clerk user ID
           eventType,
@@ -176,6 +183,10 @@ export default defineBackground(() => {
   chrome.runtime.onMessage.addListener(
     (msg: unknown, sender, sendResponse) => {
       if (!isIvyMessage(msg)) return;
+
+      // Only accept messages from our own extension (content scripts, sidebar, popup)
+      // sender.id is the extension's own ID for internal messages
+      if (sender.id !== chrome.runtime.id) return;
 
       const message = msg as IvyMessage;
 
@@ -400,7 +411,7 @@ export default defineBackground(() => {
 
       const response = await fetch(`${API_BASE_URL}/api/benefits/evaluate`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: apiHeaders(),
         body: JSON.stringify({ profile, readingLevel }),
       });
 

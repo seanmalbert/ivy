@@ -62,10 +62,7 @@ IMPORTANT: The "benefitId" must exactly match the id= value shown in brackets (e
 No markdown fences, no commentary.`,
     messages: [{
       role: "user",
-      content: `Person's profile: ${profileSummary || "Not fully provided"}
-
-Benefits they may qualify for:
-${benefitsList}`,
+      content: `<user_profile>\n${profileSummary || "Not fully provided"}\n</user_profile>\n\n<eligible_benefits>\n${benefitsList}\n</eligible_benefits>`,
     }],
   });
 

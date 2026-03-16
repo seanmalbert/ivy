@@ -10,20 +10,46 @@ import { evaluateEligibility, FEDERAL_RULES } from "@ivy/benefits-engine";
 const app = new Hono();
 
 app.use("*", logger());
+// Allowed origins for CORS
+const ALLOWED_LOCALHOST = new Set([
+  "http://localhost:3000",
+  "http://localhost:3001",
+  "http://localhost:5173",
+  "http://localhost:8787",
+]);
+
 app.use(
   "*",
   cors({
     origin: (origin) => {
-      // Allow Chrome extensions and localhost
-      if (!origin) return "*";
+      if (!origin) return null; // Reject requests with no origin
       if (origin.startsWith("chrome-extension://")) return origin;
-      if (origin.includes("localhost")) return origin;
+      if (origin.startsWith("moz-extension://")) return origin;
+      if (ALLOWED_LOCALHOST.has(origin)) return origin;
       return null;
     },
-    allowMethods: ["GET", "POST", "PUT", "DELETE"],
+    allowMethods: ["GET", "POST"],
     allowHeaders: ["Content-Type", "Authorization"],
   })
 );
+
+// ── API Key Auth (protects AI endpoints from unauthorized use) ──
+
+const API_KEY = process.env.IVY_API_KEY;
+
+app.use("/api/*", async (c, next) => {
+  // If no IVY_API_KEY is configured, skip auth (dev mode)
+  if (!API_KEY) return next();
+
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader || authHeader !== `Bearer ${API_KEY}`) {
+    return c.json(
+      { success: false, error: { code: "UNAUTHORIZED", message: "Invalid or missing API key" } },
+      401
+    );
+  }
+  return next();
+});
 
 // ── Transform ──
 

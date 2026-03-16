@@ -160,9 +160,23 @@ export default defineContentScript({
 
             switch (inst.action) {
               case "replace": {
-                // Use innerHTML if value contains HTML tags, textContent otherwise
-                if (/<[a-z][\s\S]*>/i.test(inst.value)) {
-                  el.innerHTML = inst.value;
+                // Safe DOM construction: parse AI HTML into safe list items only
+                if (/<li[\s>]/i.test(inst.value) && (el.tagName === "UL" || el.tagName === "OL")) {
+                  // For lists, safely construct <li> elements from AI output
+                  const tempDoc = new DOMParser().parseFromString(
+                    `<${el.tagName.toLowerCase()}>${inst.value}</${el.tagName.toLowerCase()}>`,
+                    "text/html"
+                  );
+                  const listEl = tempDoc.querySelector(el.tagName.toLowerCase());
+                  if (listEl) {
+                    // Clear existing children and copy only safe <li> elements
+                    while (el.firstChild) el.removeChild(el.firstChild);
+                    for (const li of Array.from(listEl.querySelectorAll("li"))) {
+                      const safeLi = document.createElement("li");
+                      safeLi.textContent = li.textContent ?? "";
+                      el.appendChild(safeLi);
+                    }
+                  }
                 } else {
                   el.textContent = inst.value;
                 }
@@ -171,17 +185,22 @@ export default defineContentScript({
                 break;
               }
               case "annotate": {
+                // Sanitize tooltip value — text only, no HTML
+                const sanitizedTip = inst.value.replace(/[<>]/g, "");
                 const tooltip = document.createElement("span");
                 tooltip.className = "ivy-tooltip";
-                tooltip.setAttribute("data-ivy-tip", inst.value);
+                tooltip.setAttribute("data-ivy-tip", sanitizedTip);
                 el.parentNode?.replaceChild(tooltip, el);
                 tooltip.appendChild(el);
                 transformedCount++;
                 break;
               }
-              case "style":
-                (el as HTMLElement).style.cssText += inst.value;
+              case "style": {
+                // Only allow safe CSS properties, reject anything with url() or expression()
+                const safeCSS = inst.value.replace(/url\s*\(|expression\s*\(/gi, "");
+                (el as HTMLElement).style.cssText += safeCSS;
                 break;
+              }
               case "remove":
                 (el as HTMLElement).style.display = "none";
                 (el as HTMLElement).classList.add("ivy-simplified");
