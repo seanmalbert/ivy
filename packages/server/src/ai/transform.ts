@@ -2,7 +2,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { TransformInstruction } from "@ivy/shared";
 import { READING_LEVEL_GRADES } from "@ivy/shared";
 
-const anthropic = new Anthropic();
+const AI_TIMEOUT_MS = 30_000;
+const anthropic = new Anthropic({ timeout: AI_TIMEOUT_MS });
 
 interface PageRegion {
   selector: string;
@@ -88,13 +89,16 @@ export async function transformContent(
 
   try {
     const jsonMatch = text.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) return [];
+    if (!jsonMatch) {
+      console.warn("Transform: AI response did not contain a JSON array");
+      return [];
+    }
     const instructions = JSON.parse(jsonMatch[0]) as TransformInstruction[];
-    // Validate each instruction has required fields
     return instructions.filter(
       (i) => i.selector && i.action && i.value !== undefined
     );
-  } catch {
+  } catch (err) {
+    console.error("Transform: Failed to parse AI response as JSON:", err);
     return [];
   }
 }
@@ -161,9 +165,11 @@ export async function* streamTransformContent(
       );
       yield "data: " + JSON.stringify({ type: "done", instructions: valid }) + "\n\n";
     } else {
+      console.warn("Stream transform: AI response did not contain a JSON array");
       yield "data: " + JSON.stringify({ type: "done", instructions: [] }) + "\n\n";
     }
-  } catch {
+  } catch (err) {
+    console.error("Stream transform: Failed to parse AI response:", err);
     yield "data: " + JSON.stringify({ type: "done", instructions: [] }) + "\n\n";
   }
 }

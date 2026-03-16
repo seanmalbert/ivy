@@ -1,11 +1,30 @@
 import { serve } from "@hono/node-server";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
+import Anthropic from "@anthropic-ai/sdk";
 import { transformContent } from "./ai/transform.js";
 import { explainText } from "./ai/explain.js";
 import { rankAndExplainBenefits } from "./ai/benefits.js";
 import { evaluateEligibility, FEDERAL_RULES } from "@ivy/benefits-engine";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function handleApiError(err: unknown, c: Context<any>, code: string) {
+  if (err instanceof Anthropic.RateLimitError) {
+    console.error(`${code}: Rate limited by Anthropic`);
+    return c.json({ success: false, error: { code: "RATE_LIMITED", message: "AI service is temporarily busy. Please try again in a moment." } }, 429);
+  }
+  if (err instanceof Anthropic.AuthenticationError) {
+    console.error(`${code}: Anthropic authentication failed`);
+    return c.json({ success: false, error: { code: "AI_AUTH_FAILED", message: "AI service configuration error" } }, 500);
+  }
+  if (err instanceof Anthropic.APIConnectionError) {
+    console.error(`${code}: Cannot connect to Anthropic:`, err.message);
+    return c.json({ success: false, error: { code: "AI_UNAVAILABLE", message: "AI service is temporarily unavailable" } }, 503);
+  }
+  console.error(`${code}:`, err);
+  return c.json({ success: false, error: { code, message: "An unexpected error occurred" } }, 500);
+}
 
 const app = new Hono();
 
@@ -51,6 +70,20 @@ app.use("/api/*", async (c, next) => {
   return next();
 });
 
+// ── Request Validation Helpers ──
+
+const MAX_CONTENT_LENGTH = 50_000;
+const MAX_REGIONS = 30;
+const MAX_TEXT_LENGTH = 5_000;
+const VALID_READING_LEVELS = new Set(["elementary", "middle-school", "high-school", "college", "original"]);
+const VALID_INCOME_BRACKETS = new Set(["0-10k", "10k-20k", "20k-30k", "30k-40k", "40k-50k", "50k-75k", "75k-100k", "100k+"]);
+const VALID_AGE_BRACKETS = new Set(["under-18", "18-24", "25-34", "35-44", "45-54", "55-64", "65+"]);
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function validationError(c: Context<any>, message: string) {
+  return c.json({ success: false, error: { code: "VALIDATION_ERROR", message } }, 400);
+}
+
 // ── Transform ──
 
 app.post("/api/transform", async (c) => {
@@ -61,12 +94,22 @@ app.post("/api/transform", async (c) => {
     regions?: Array<{ selector: string; type: string; content: string }>;
   }>();
 
+  if (!body.content || typeof body.content !== "string") {
+    return validationError(c, "content is required and must be a string");
+  }
+  if (body.content.length > MAX_CONTENT_LENGTH) {
+    return validationError(c, `content exceeds maximum length of ${MAX_CONTENT_LENGTH}`);
+  }
+  if (body.regions && body.regions.length > MAX_REGIONS) {
+    return validationError(c, `regions exceeds maximum of ${MAX_REGIONS}`);
+  }
+
   const startTime = Date.now();
 
   try {
     const instructions = await transformContent(
       body.content,
-      body.preferences,
+      body.preferences ?? {},
       body.regions
     );
 
@@ -79,14 +122,7 @@ app.post("/api/transform", async (c) => {
       },
     });
   } catch (err) {
-    console.error("Transform error:", err);
-    return c.json(
-      {
-        success: false,
-        error: { code: "TRANSFORM_FAILED", message: "Transform failed" },
-      },
-      500
-    );
+    return handleApiError(err, c, "TRANSFORM_FAILED");
   }
 });
 
@@ -99,12 +135,22 @@ app.post("/api/explain", async (c) => {
     readingLevel?: string;
   }>();
 
+  if (!body.text || typeof body.text !== "string") {
+    return validationError(c, "text is required and must be a string");
+  }
+  if (body.text.length > MAX_TEXT_LENGTH) {
+    return validationError(c, `text exceeds maximum length of ${MAX_TEXT_LENGTH}`);
+  }
+  if (body.readingLevel && !VALID_READING_LEVELS.has(body.readingLevel)) {
+    return validationError(c, "invalid readingLevel");
+  }
+
   const startTime = Date.now();
 
   try {
     const answer = await explainText(
       body.text,
-      body.context,
+      body.context?.slice(0, 1000) ?? "",
       body.readingLevel
     );
 
@@ -117,14 +163,7 @@ app.post("/api/explain", async (c) => {
       },
     });
   } catch (err) {
-    console.error("Explain error:", err);
-    return c.json(
-      {
-        success: false,
-        error: { code: "EXPLAIN_FAILED", message: "Explanation failed" },
-      },
-      500
-    );
+    return handleApiError(err, c, "EXPLAIN_FAILED");
   }
 });
 
@@ -142,6 +181,25 @@ app.post("/api/benefits/evaluate", async (c) => {
     };
     readingLevel?: string;
   }>();
+
+  if (!body.profile || typeof body.profile !== "object") {
+    return validationError(c, "profile is required");
+  }
+  if (body.profile.incomeBracket && !VALID_INCOME_BRACKETS.has(body.profile.incomeBracket)) {
+    return validationError(c, "invalid incomeBracket");
+  }
+  if (body.profile.ageBracket && !VALID_AGE_BRACKETS.has(body.profile.ageBracket)) {
+    return validationError(c, "invalid ageBracket");
+  }
+  if (body.profile.householdSize != null && (body.profile.householdSize < 1 || body.profile.householdSize > 20)) {
+    return validationError(c, "householdSize must be between 1 and 20");
+  }
+  if (body.profile.state && (typeof body.profile.state !== "string" || body.profile.state.length !== 2)) {
+    return validationError(c, "state must be a 2-letter code");
+  }
+  if (body.readingLevel && !VALID_READING_LEVELS.has(body.readingLevel)) {
+    return validationError(c, "invalid readingLevel");
+  }
 
   const startTime = Date.now();
 
@@ -164,14 +222,7 @@ app.post("/api/benefits/evaluate", async (c) => {
       },
     });
   } catch (err) {
-    console.error("Benefits evaluation error:", err);
-    return c.json(
-      {
-        success: false,
-        error: { code: "BENEFITS_FAILED", message: "Benefits evaluation failed" },
-      },
-      500
-    );
+    return handleApiError(err, c, "BENEFITS_FAILED");
   }
 });
 
@@ -188,7 +239,6 @@ app.get("/health", (c) => {
   return c.json({
     status: "ok",
     service: "ivy-server",
-    hasAnthropicKey: !!process.env.ANTHROPIC_API_KEY,
     timestamp: new Date().toISOString(),
   });
 });

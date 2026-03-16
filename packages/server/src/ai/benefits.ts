@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Benefit, EligibilityStatus, BenefitRecommendation } from "@ivy/shared";
 
-const anthropic = new Anthropic();
+const anthropic = new Anthropic({ timeout: 30_000 });
 
 interface EligibilityResultInput {
   benefit: Benefit;

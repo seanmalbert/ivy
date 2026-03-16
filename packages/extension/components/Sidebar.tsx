@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import * as Tabs from "@radix-ui/react-tabs";
 import { usePreferencesStore, useTransformStore, useBenefitsStore, useEligibilityStore } from "../lib/store";
 import { PreferenceChat } from "./PreferenceChat";
@@ -13,7 +13,13 @@ export function Sidebar() {
   const benefits = useBenefitsStore();
   const eligibility = useEligibilityStore();
 
-  // Listen for transform status updates from the service worker
+  // Keep refs to store actions so the listener stays stable
+  const transformActions = useRef({ setStatus, setResult, setError });
+  transformActions.current = { setStatus, setResult, setError };
+  const benefitsActions = useRef(benefits);
+  benefitsActions.current = benefits;
+
+  // Listen for status updates from the service worker (stable listener, no churn)
   useEffect(() => {
     const listener = (msg: unknown) => {
       const m = msg as { type?: string; payload?: Record<string, unknown> };
@@ -21,17 +27,17 @@ export function Sidebar() {
         const p = m.payload;
         switch (p.status) {
           case "transforming":
-            setStatus("transforming");
+            transformActions.current.setStatus("transforming");
             break;
           case "done":
-            setResult(
+            transformActions.current.setResult(
               (p.processingMs as number) ?? 0,
               (p.cached as boolean) ?? false,
               (p.transformedCount as number) ?? 0
             );
             break;
           case "error":
-            setError((p.message as string) ?? "Transform failed");
+            transformActions.current.setError((p.message as string) ?? "Transform failed");
             break;
         }
       }
@@ -40,16 +46,16 @@ export function Sidebar() {
         const p = m.payload;
         switch (p.status) {
           case "evaluating":
-            benefits.setStatus("evaluating");
+            benefitsActions.current.setStatus("evaluating");
             break;
           case "done":
-            benefits.setResults(
+            benefitsActions.current.setResults(
               (p.recommendations as unknown[]) as import("@ivy/shared").BenefitRecommendation[],
               (p.processingMs as number) ?? 0
             );
             break;
           case "error":
-            benefits.setError((p.message as string) ?? "Benefits evaluation failed");
+            benefitsActions.current.setError((p.message as string) ?? "Benefits evaluation failed");
             break;
         }
       }
@@ -57,7 +63,7 @@ export function Sidebar() {
 
     chrome.runtime.onMessage.addListener(listener);
     return () => chrome.runtime.onMessage.removeListener(listener);
-  }, [setResult, setStatus, setError, benefits.setStatus, benefits.setResults, benefits.setError]);
+  }, []);
 
   if (!isOnboarded) {
     return (

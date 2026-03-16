@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { READING_LEVEL_GRADES } from "@ivy/shared";
 
-const anthropic = new Anthropic();
+const anthropic = new Anthropic({ timeout: 30_000 });
 
 export async function explainText(
   text: string,

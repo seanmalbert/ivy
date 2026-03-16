@@ -4,6 +4,7 @@ import type {
   HighlightAnswerMessage,
   PageRegion,
 } from "@ivy/shared/messages";
+import { STORAGE_KEYS } from "@ivy/shared";
 
 export default defineContentScript({
   matches: ["<all_urls>"],
@@ -430,10 +431,10 @@ export default defineContentScript({
 
     // ── Initialize ──
 
-    chrome.storage.local.get("ivy_preferences", (result) => {
-      if (result.ivy_preferences) {
+    chrome.storage.local.get(STORAGE_KEYS.PREFERENCES, (result) => {
+      if (result[STORAGE_KEYS.PREFERENCES]) {
         try {
-          const stored = JSON.parse(result.ivy_preferences);
+          const stored = JSON.parse(result[STORAGE_KEYS.PREFERENCES]);
           if (stored?.state?.preferences) {
             applyAccessibilityCSS(stored.state.preferences);
           }
