@@ -9,5 +9,5 @@ dist/
 .DS_Store
 .wrangler/
 chrome-mv3/
-ivy-extension.zip
+ivy-extension*.zip
 .chrome-profile/
