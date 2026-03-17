@@ -2,10 +2,10 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { TransformInstruction } from "@ivy/shared";
 import { READING_LEVEL_GRADES } from "@ivy/shared";
 
-const AI_TIMEOUT_MS = 30_000;
-const MAX_REGIONS = 25;
-const MAX_REGION_CONTENT = 500;
-const MAX_FALLBACK_CONTENT = 15_000;
+const AI_TIMEOUT_MS = 60_000;
+const MAX_REGIONS = 15;
+const MAX_REGION_CONTENT = 400;
+const MAX_FALLBACK_CONTENT = 10_000;
 const TRANSFORM_MAX_TOKENS = 4096;
 const MODEL_COMPLEX = "claude-sonnet-4-6";
 const MODEL_SIMPLE = "claude-haiku-4-5";
@@ -80,8 +80,8 @@ function resolveTransformParams(
         .join("\n\n---\n\n")
     : content.slice(0, MAX_FALLBACK_CONTENT);
 
-  const isComplexTransform = effectiveReadingLevel === "elementary" || language !== "en";
-  const model = isComplexTransform ? MODEL_COMPLEX : MODEL_SIMPLE;
+  // Only use Sonnet for translation; Haiku handles simplification well and is much faster
+  const model = language !== "en" ? MODEL_COMPLEX : MODEL_SIMPLE;
 
   return { model, gradeTarget, jargonLevel, language, regionContext };
 }
@@ -114,6 +114,8 @@ export async function transformContent(
   regions?: PageRegion[]
 ): Promise<TransformInstruction[]> {
   const params = resolveTransformParams(content, preferences, regions);
+
+  console.log(`Transform: model=${params.model}, regions=${regions?.length ?? 0}, context=${params.regionContext.length} chars`);
 
   const message = await anthropic.messages.create({
     model: params.model,

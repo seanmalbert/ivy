@@ -108,22 +108,39 @@ export default defineContentScript({
             background: rgba(124, 58, 237, 0.04);
             color: #1f2937 !important;
             transition: background 0.3s;
+            position: relative;
           }
           .ivy-simplified:hover {
             background: rgba(124, 58, 237, 0.08);
           }
-          .ivy-simplified::after {
-            content: "Simplified by Ivy";
-            display: block;
-            font-size: 10px;
-            color: #7c3aed;
+          .ivy-toggle-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
             margin-top: 4px;
-            font-family: system-ui, sans-serif;
             opacity: 0;
             transition: opacity 0.2s;
           }
-          .ivy-simplified:hover::after {
+          .ivy-simplified:hover .ivy-toggle-bar {
             opacity: 1;
+          }
+          .ivy-toggle-bar span {
+            font-size: 10px;
+            color: #7c3aed;
+            font-family: system-ui, sans-serif;
+          }
+          .ivy-toggle-btn {
+            font-size: 10px;
+            color: #7c3aed;
+            background: none;
+            border: 1px solid #7c3aed;
+            border-radius: 4px;
+            padding: 1px 6px;
+            cursor: pointer;
+            font-family: system-ui, sans-serif;
+          }
+          .ivy-toggle-btn:hover {
+            background: rgba(124, 58, 237, 0.1);
           }
           .ivy-tooltip {
             border-bottom: 1px dashed #7c3aed;
@@ -162,16 +179,15 @@ export default defineContentScript({
 
             switch (inst.action) {
               case "replace": {
+                const savedOriginal = el.innerHTML;
                 // Safe DOM construction: parse AI HTML into safe list items only
                 if (/<li[\s>]/i.test(inst.value) && (el.tagName === "UL" || el.tagName === "OL")) {
-                  // For lists, safely construct <li> elements from AI output
                   const tempDoc = new DOMParser().parseFromString(
                     `<${el.tagName.toLowerCase()}>${inst.value}</${el.tagName.toLowerCase()}>`,
                     "text/html"
                   );
                   const listEl = tempDoc.querySelector(el.tagName.toLowerCase());
                   if (listEl) {
-                    // Clear existing children and copy only safe <li> elements
                     while (el.firstChild) el.removeChild(el.firstChild);
                     for (const li of Array.from(listEl.querySelectorAll("li"))) {
                       const safeLi = document.createElement("li");
@@ -183,6 +199,37 @@ export default defineContentScript({
                   el.textContent = inst.value;
                 }
                 (el as HTMLElement).classList.add("ivy-simplified");
+
+                // Add toggle bar to switch between simplified and original
+                const simplifiedHTML = el.innerHTML;
+                const bar = document.createElement("div");
+                bar.className = "ivy-toggle-bar";
+                const label = document.createElement("span");
+                label.textContent = "Simplified by Ivy";
+                const btn = document.createElement("button");
+                btn.className = "ivy-toggle-btn";
+                btn.textContent = "Show original";
+                let showingOriginal = false;
+                btn.addEventListener("click", (e) => {
+                  e.stopPropagation();
+                  showingOriginal = !showingOriginal;
+                  if (showingOriginal) {
+                    // Remove toggle bar before restoring, then re-add
+                    bar.remove();
+                    el.innerHTML = savedOriginal;
+                    el.appendChild(bar);
+                    btn.textContent = "Show simplified";
+                  } else {
+                    bar.remove();
+                    el.innerHTML = simplifiedHTML;
+                    el.appendChild(bar);
+                    btn.textContent = "Show original";
+                  }
+                });
+                bar.appendChild(label);
+                bar.appendChild(btn);
+                el.appendChild(bar);
+
                 transformedCount++;
                 break;
               }

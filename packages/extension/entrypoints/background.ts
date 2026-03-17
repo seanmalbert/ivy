@@ -100,9 +100,13 @@ export default defineBackground(() => {
     regions?: unknown[]
   ): Promise<{ instructions: TransformInstruction[]; processingMs: number } | null> {
     try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 120_000);
+
       const response = await fetch(`${API_BASE_URL}/api/transform`, {
         method: "POST",
         headers: apiHeaders(),
+        signal: controller.signal,
         body: JSON.stringify({
           url,
           content: content.slice(0, 50000),
@@ -111,16 +115,26 @@ export default defineBackground(() => {
         }),
       });
 
-      if (!response.ok) return null;
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        console.warn(`Transform failed: ${response.status} ${response.statusText}`);
+        return null;
+      }
 
       const result = (await response.json()) as {
         success: boolean;
         data?: { instructions: TransformInstruction[]; cached: boolean; processingMs: number };
+        error?: { code: string; message: string };
       };
 
-      if (!result.success || !result.data) return null;
+      if (!result.success || !result.data) {
+        console.warn("Transform returned no data:", result.error?.message ?? "unknown");
+        return null;
+      }
       return { instructions: result.data.instructions, processingMs: result.data.processingMs };
-    } catch {
+    } catch (err) {
+      console.warn("Transform request failed:", err);
       return null;
     }
   }
