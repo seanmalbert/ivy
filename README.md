@@ -52,14 +52,17 @@ Ivy greets new users with a conversational setup flow, asking about reading comf
 
 ### Content Simplification
 
-Click "Simplify this page" and Ivy rewrites complex text at your reading level, with jargon tooltips. Simplified sections are marked with a purple left border.
+Click "Simplify this page" and Ivy rewrites complex text at your reading level, with jargon tooltips. Simplified sections are marked with a purple left border. There is an option to toggle between the original and simplified content. Tooltips appear on hover that help provide simple definitions for terms.
 
 <p align="center">
   <img src="screenshots/simplified-page-processing.png" width="280" alt="Simplification in progress" />
 </p>
 
 <p align="center">
-  <img src="screenshots/ask-ivy-simplified-page.png" width="700" alt="Simplified SNAP benefits page on USA.gov" />
+  <img width="1440" height="835" alt="Simplified Medicaid eligibility page on medicaid.gov" src="https://github.com/user-attachments/assets/1e4decef-1f68-4b19-9d8e-0de9fef3f614" />
+
+  <img width="1439" height="836" alt="Simplified Medicaid eligibility page on medicaid.gov, with original content shown." src="https://github.com/user-attachments/assets/d7a10141-bb06-4c36-8316-4f7fa24bfb78" />
+
 </p>
 
 ### Highlight-to-Ask
@@ -79,6 +82,14 @@ Fill out a short eligibility profile and Ivy matches you against federal benefit
   <img src="screenshots/benefits-form.png" width="280" alt="Benefits eligibility form" />
   <img src="screenshots/benefits-results.png" width="280" alt="Benefits results showing SNAP, LIHEAP, Medicaid" />
 </p>
+
+## Screen Recording of extension in action
+
+
+
+https://github.com/user-attachments/assets/835e16a1-a780-4887-9209-dc8f184501b3
+
+
 
 ## Architecture
 
