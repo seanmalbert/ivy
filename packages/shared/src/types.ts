@@ -120,6 +120,19 @@ export type BehavioralEventType =
   | "time_on_content"
   | "preference_changed";
 
+// ── Form Detection ──
+
+export interface ExtractedFormField {
+  selector: string;
+  tagName: string;
+  inputType: string;
+  label: string;
+  name: string;
+  placeholder: string;
+  required: boolean;
+  options?: string[];
+}
+
 // ── Form Guidance ──
 
 export interface FormFieldGuidance {

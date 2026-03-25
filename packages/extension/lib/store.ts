@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { DEFAULT_PREFERENCES, STORAGE_KEYS } from "@ivy/shared";
-import type { UserPreferences, BenefitRecommendation } from "@ivy/shared";
+import type { UserPreferences, BenefitRecommendation, FormFieldGuidance } from "@ivy/shared";
 
 // ── Chrome storage adapter for Zustand ──
 
@@ -185,4 +185,35 @@ export const useTransformStore = create<TransformState>()((set) => ({
     set({ status: "done", lastTransformMs: ms, wasCached: cached, transformedCount: count ?? 0, error: null }),
   setError: (error) => set({ status: "error", error }),
   reset: () => set({ status: "idle", lastTransformMs: null, wasCached: false, transformedCount: 0, error: null }),
+}));
+
+// ── Form Guidance Store ──
+
+type FormGuidanceStatus = "idle" | "scanning" | "generating" | "done" | "error";
+
+interface FormGuidanceState {
+  status: FormGuidanceStatus;
+  guidance: FormFieldGuidance[];
+  detectedFieldCount: number;
+  processingMs: number | null;
+  error: string | null;
+  setStatus: (status: FormGuidanceStatus) => void;
+  setResults: (guidance: FormFieldGuidance[], fieldCount: number, ms: number) => void;
+  setDetectedCount: (count: number) => void;
+  setError: (error: string) => void;
+  reset: () => void;
+}
+
+export const useFormGuidanceStore = create<FormGuidanceState>()((set) => ({
+  status: "idle",
+  guidance: [],
+  detectedFieldCount: 0,
+  processingMs: null,
+  error: null,
+  setStatus: (status) => set({ status, error: null }),
+  setResults: (guidance, fieldCount, ms) =>
+    set({ status: "done", guidance, detectedFieldCount: fieldCount, processingMs: ms, error: null }),
+  setDetectedCount: (count) => set({ detectedFieldCount: count }),
+  setError: (error) => set({ status: "error", error, guidance: [] }),
+  reset: () => set({ status: "idle", guidance: [], detectedFieldCount: 0, processingMs: null, error: null }),
 }));

@@ -1,10 +1,11 @@
 import { useEffect, useRef } from "react";
 import * as Tabs from "@radix-ui/react-tabs";
-import { usePreferencesStore, useTransformStore, useBenefitsStore, useEligibilityStore } from "../lib/store";
+import { usePreferencesStore, useTransformStore, useBenefitsStore, useEligibilityStore, useFormGuidanceStore } from "../lib/store";
 import { PreferenceChat } from "./PreferenceChat";
 import { PreferencesPanel } from "./PreferencesPanel";
 import { EligibilityForm } from "./EligibilityForm";
 import { BenefitsResults } from "./BenefitsResults";
+import { FormGuidancePanel } from "./FormGuidancePanel";
 
 export function Sidebar() {
   const { isOnboarded, isEnabled, setEnabled } = usePreferencesStore();
@@ -12,12 +13,15 @@ export function Sidebar() {
     useTransformStore();
   const benefits = useBenefitsStore();
   const eligibility = useEligibilityStore();
+  const formGuidance = useFormGuidanceStore();
 
   // Keep refs to store actions so the listener stays stable
   const transformActions = useRef({ setStatus, setResult, setError });
   transformActions.current = { setStatus, setResult, setError };
   const benefitsActions = useRef(benefits);
   benefitsActions.current = benefits;
+  const formGuidanceActions = useRef(formGuidance);
+  formGuidanceActions.current = formGuidance;
 
   // Listen for status updates from the service worker (stable listener, no churn)
   useEffect(() => {
@@ -56,6 +60,33 @@ export function Sidebar() {
             break;
           case "error":
             benefitsActions.current.setError((p.message as string) ?? "Benefits evaluation failed");
+            break;
+        }
+      }
+
+      if (m.type === "FORM_GUIDANCE_STATUS" && m.payload) {
+        const p = m.payload;
+        switch (p.status) {
+          case "scanning":
+            formGuidanceActions.current.setStatus("scanning");
+            break;
+          case "generating":
+            formGuidanceActions.current.setStatus("generating");
+            if (p.fieldCount) formGuidanceActions.current.setDetectedCount(p.fieldCount as number);
+            break;
+          case "done":
+            if (p.guidance && (p.guidance as unknown[]).length > 0) {
+              formGuidanceActions.current.setResults(
+                p.guidance as import("@ivy/shared").FormFieldGuidance[],
+                (p.fieldCount as number) ?? 0,
+                (p.processingMs as number) ?? 0
+              );
+            } else {
+              formGuidanceActions.current.setResults([], 0, 0);
+            }
+            break;
+          case "error":
+            formGuidanceActions.current.setError((p.message as string) ?? "Form guidance failed");
             break;
         }
       }
@@ -111,7 +142,7 @@ export function Sidebar() {
       {/* Tabs */}
       <Tabs.Root defaultValue="home" className="flex-1 flex flex-col min-h-0">
         <Tabs.List className="flex border-b border-gray-200 px-4">
-          {["home", "benefits", "settings"].map((tab) => (
+          {["home", "forms", "benefits", "settings"].map((tab) => (
             <Tabs.Trigger
               key={tab}
               value={tab}
@@ -171,7 +202,27 @@ export function Sidebar() {
                 </button>
                 <button
                   onClick={() => {
-                    // Switch to benefits tab — user will fill form there
+                    const formsTab = document.querySelector('[data-value="forms"]') as HTMLElement | null;
+                    formsTab?.click();
+                    chrome.runtime.sendMessage({
+                      type: "SCAN_FOR_FORMS",
+                      payload: {},
+                    });
+                  }}
+                  disabled={!isEnabled || formGuidance.status === "scanning" || formGuidance.status === "generating"}
+                  className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-gray-50 transition-colors disabled:opacity-50 flex items-center justify-between"
+                >
+                  <span>
+                    {formGuidance.status === "scanning" || formGuidance.status === "generating"
+                      ? "Analyzing form..."
+                      : "Help with this form"}
+                  </span>
+                  {(formGuidance.status === "scanning" || formGuidance.status === "generating") && (
+                    <span className="w-4 h-4 border-2 border-violet-300 border-t-violet-600 rounded-full animate-spin" />
+                  )}
+                </button>
+                <button
+                  onClick={() => {
                     const benefitsTab = document.querySelector('[data-value="benefits"]') as HTMLElement | null;
                     benefitsTab?.click();
                   }}
@@ -221,6 +272,10 @@ export function Sidebar() {
               </div>
             )}
           </div>
+        </Tabs.Content>
+
+        <Tabs.Content value="forms" className="flex-1 overflow-y-auto p-4">
+          <FormGuidancePanel />
         </Tabs.Content>
 
         <Tabs.Content value="benefits" className="flex-1 overflow-y-auto p-4">

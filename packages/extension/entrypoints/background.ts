@@ -1,7 +1,8 @@
 import { isIvyMessage } from "@ivy/shared/messages";
 import type { IvyMessage, PageContentMessage } from "@ivy/shared/messages";
 import { STORAGE_KEYS } from "@ivy/shared";
-import type { TransformInstruction } from "@ivy/shared";
+import type { TransformInstruction, FormFieldGuidance } from "@ivy/shared";
+import type { FormDetectedMessage } from "@ivy/shared/messages";
 
 // Use Vite env vars if set (production build), otherwise localhost for dev
 const API_BASE_URL =
@@ -65,6 +66,13 @@ export default defineBackground(() => {
       .join("")
       .slice(0, 16);
   }
+
+  // ── Form Guidance Cache ──
+
+  const formGuidanceCache = new Map<
+    string,
+    { guidance: FormFieldGuidance[]; expiresAt: number }
+  >();
 
   // ── On-Device AI (Chrome Prompt API / Gemini Nano) ──
 
@@ -232,6 +240,14 @@ export default defineBackground(() => {
 
         case "EVALUATE_BENEFITS": {
           handleEvaluateBenefits(message.payload.profile).then(sendResponse);
+          return true;
+        }
+
+        case "SCAN_FOR_FORMS": {
+          const tabIdPromise = sender.tab?.id
+            ? Promise.resolve(sender.tab.id)
+            : getActiveTabId();
+          tabIdPromise.then((tabId) => handleScanForForms(tabId)).then(sendResponse);
           return true;
         }
 
@@ -466,6 +482,141 @@ export default defineBackground(() => {
       chrome.runtime.sendMessage({
         type: "BENEFITS_STATUS",
         payload: { status: "error", message: "Could not connect to benefits service" },
+      }).catch(() => {});
+    }
+  }
+
+  async function handleScanForForms(tabId?: number) {
+    if (!tabId) return;
+
+    chrome.runtime.sendMessage({
+      type: "FORM_GUIDANCE_STATUS",
+      payload: { status: "scanning" },
+    }).catch(() => {});
+
+    const injected = await ensureContentScript(tabId);
+    if (!injected) {
+      chrome.runtime.sendMessage({
+        type: "FORM_GUIDANCE_STATUS",
+        payload: { status: "error", message: "Cannot access this page" },
+      }).catch(() => {});
+      return;
+    }
+
+    // Ask content script to detect forms
+    const formData = await new Promise<FormDetectedMessage["payload"] | null>(
+      (resolve) => {
+        chrome.tabs.sendMessage(
+          tabId,
+          { type: "SCAN_FOR_FORMS", payload: {} },
+          (response) => {
+            if (chrome.runtime.lastError || !response) resolve(null);
+            else resolve(response.payload);
+          }
+        );
+      }
+    );
+
+    if (!formData || formData.fields.length === 0) {
+      chrome.runtime.sendMessage({
+        type: "FORM_GUIDANCE_STATUS",
+        payload: { status: "done", guidance: [], fieldCount: 0 },
+      }).catch(() => {});
+      return;
+    }
+
+    // Check cache
+    const urlHash = await hashString(formData.url);
+    const cached = formGuidanceCache.get(urlHash);
+    if (cached && cached.expiresAt > Date.now()) {
+      chrome.tabs.sendMessage(tabId, {
+        type: "FORM_GUIDANCE_RESULT",
+        payload: { guidance: cached.guidance, cached: true, processingMs: 0 },
+      });
+      chrome.runtime.sendMessage({
+        type: "FORM_GUIDANCE_STATUS",
+        payload: { status: "done", guidance: cached.guidance, fieldCount: formData.fields.length, cached: true },
+      }).catch(() => {});
+      return;
+    }
+
+    chrome.runtime.sendMessage({
+      type: "FORM_GUIDANCE_STATUS",
+      payload: { status: "generating", fieldCount: formData.fields.length },
+    }).catch(() => {});
+
+    try {
+      const preferences = await getPreferences();
+      const readingLevel = preferences.readingLevel as string | undefined;
+
+      const response = await fetch(`${API_BASE_URL}/api/form-guidance`, {
+        method: "POST",
+        headers: apiHeaders(),
+        body: JSON.stringify({
+          url: formData.url,
+          pageTitle: formData.title,
+          fields: formData.fields,
+          readingLevel,
+        }),
+      });
+
+      if (!response.ok) {
+        chrome.runtime.sendMessage({
+          type: "FORM_GUIDANCE_STATUS",
+          payload: { status: "error", message: "Form guidance request failed" },
+        }).catch(() => {});
+        return;
+      }
+
+      const result = (await response.json()) as {
+        success: boolean;
+        data?: { guidance: FormFieldGuidance[]; processingMs: number };
+      };
+
+      if (result.success && result.data) {
+        // Cache for 7 days
+        formGuidanceCache.set(urlHash, {
+          guidance: result.data.guidance,
+          expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+        });
+
+        // Send guidance to content script for inline help icons
+        chrome.tabs.sendMessage(tabId, {
+          type: "FORM_GUIDANCE_RESULT",
+          payload: {
+            guidance: result.data.guidance,
+            cached: false,
+            processingMs: result.data.processingMs,
+          },
+        });
+
+        // Notify sidebar
+        chrome.runtime.sendMessage({
+          type: "FORM_GUIDANCE_STATUS",
+          payload: {
+            status: "done",
+            guidance: result.data.guidance,
+            fieldCount: formData.fields.length,
+            processingMs: result.data.processingMs,
+          },
+        }).catch(() => {});
+
+        trackEvent("form_guidance_used", {
+          url: formData.url,
+          fieldCount: formData.fields.length,
+          guidanceCount: result.data.guidance.length,
+          processingMs: result.data.processingMs,
+        });
+      } else {
+        chrome.runtime.sendMessage({
+          type: "FORM_GUIDANCE_STATUS",
+          payload: { status: "error", message: "No guidance generated" },
+        }).catch(() => {});
+      }
+    } catch {
+      chrome.runtime.sendMessage({
+        type: "FORM_GUIDANCE_STATUS",
+        payload: { status: "error", message: "Could not connect to form guidance service" },
       }).catch(() => {});
     }
   }

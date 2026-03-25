@@ -6,6 +6,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { transformContent } from "./ai/transform.js";
 import { explainText } from "./ai/explain.js";
 import { rankAndExplainBenefits } from "./ai/benefits.js";
+import { generateFormGuidance } from "./ai/form-guidance.js";
 import { evaluateEligibility, FEDERAL_RULES } from "@ivy/benefits-engine";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -223,6 +224,63 @@ app.post("/api/benefits/evaluate", async (c) => {
     });
   } catch (err) {
     return handleApiError(err, c, "BENEFITS_FAILED");
+  }
+});
+
+// ── Form Guidance ──
+
+const MAX_FORM_FIELDS = 50;
+
+app.post("/api/form-guidance", async (c) => {
+  const body = await c.req.json<{
+    url: string;
+    pageTitle: string;
+    fields: Array<{
+      selector: string;
+      tagName: string;
+      inputType: string;
+      label: string;
+      name: string;
+      placeholder: string;
+      required: boolean;
+      options?: string[];
+    }>;
+    readingLevel?: string;
+  }>();
+
+  if (!body.fields || !Array.isArray(body.fields) || body.fields.length === 0) {
+    return validationError(c, "fields is required and must be a non-empty array");
+  }
+  if (body.fields.length > MAX_FORM_FIELDS) {
+    return validationError(c, `fields exceeds maximum of ${MAX_FORM_FIELDS}`);
+  }
+  if (!body.url || typeof body.url !== "string") {
+    return validationError(c, "url is required and must be a string");
+  }
+  if (body.readingLevel && !VALID_READING_LEVELS.has(body.readingLevel)) {
+    return validationError(c, "invalid readingLevel");
+  }
+
+  const startTime = Date.now();
+
+  try {
+    const guidance = await generateFormGuidance(
+      body.fields,
+      body.url,
+      body.pageTitle ?? "",
+      body.readingLevel
+    );
+
+    return c.json({
+      success: true,
+      data: {
+        guidance,
+        cached: false,
+        processingMs: Date.now() - startTime,
+      },
+    });
+  } catch (err) {
+    return handleApiError(err, c, "FORM_GUIDANCE_FAILED");
   }
 });
 

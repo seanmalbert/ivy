@@ -3,7 +3,7 @@
  * Used between: Service Worker ↔ Content Script ↔ Sidebar ↔ Popup
  */
 
-import type { TransformInstruction, UserPreferences, PageRegion, BenefitRecommendation } from "./types.js";
+import type { TransformInstruction, UserPreferences, PageRegion, BenefitRecommendation, ExtractedFormField, FormFieldGuidance } from "./types.js";
 export type { PageRegion } from "./types.js";
 
 // ── Message types ──
@@ -20,6 +20,9 @@ export type IvyMessage =
   | AuthStateMessage
   | EvaluateBenefitsMessage
   | BenefitsResultMessage
+  | ScanForFormsMessage
+  | FormDetectedMessage
+  | FormGuidanceResultMessage
   | UndoTransformsMessage
   | ErrorMessage;
 
@@ -125,6 +128,31 @@ export interface BenefitsResultMessage {
   type: "BENEFITS_RESULT";
   payload: {
     recommendations: BenefitRecommendation[];
+    processingMs: number;
+  };
+}
+
+// ── Form Guidance ──
+
+export interface ScanForFormsMessage {
+  type: "SCAN_FOR_FORMS";
+  payload: Record<string, never>;
+}
+
+export interface FormDetectedMessage {
+  type: "FORM_DETECTED";
+  payload: {
+    url: string;
+    title: string;
+    fields: ExtractedFormField[];
+  };
+}
+
+export interface FormGuidanceResultMessage {
+  type: "FORM_GUIDANCE_RESULT";
+  payload: {
+    guidance: FormFieldGuidance[];
+    cached: boolean;
     processingMs: number;
   };
 }

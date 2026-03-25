@@ -2,8 +2,10 @@ import { isIvyMessage } from "@ivy/shared/messages";
 import type {
   TransformResultMessage,
   HighlightAnswerMessage,
+  FormGuidanceResultMessage,
   PageRegion,
 } from "@ivy/shared/messages";
+import type { ExtractedFormField, FormFieldGuidance } from "@ivy/shared";
 import { STORAGE_KEYS } from "@ivy/shared";
 
 export default defineContentScript({
@@ -282,6 +284,211 @@ export default defineContentScript({
       transformedCount = 0;
     }
 
+    // ── Form Detection ──
+
+    function getFieldSelector(el: HTMLElement): string {
+      if (el.id) return `#${CSS.escape(el.id)}`;
+      const name = el.getAttribute("name");
+      if (name) {
+        const tag = el.tagName.toLowerCase();
+        const matches = document.querySelectorAll(`${tag}[name="${CSS.escape(name)}"]`);
+        if (matches.length === 1) return `${tag}[name="${CSS.escape(name)}"]`;
+      }
+      return getUniqueSelector(el);
+    }
+
+    function extractFieldLabel(el: HTMLElement): string {
+      // 1. Explicit <label for="...">
+      if (el.id) {
+        const label = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
+        if (label?.textContent?.trim()) return label.textContent.trim();
+      }
+      // 2. aria-label
+      const ariaLabel = el.getAttribute("aria-label");
+      if (ariaLabel) return ariaLabel;
+      // 3. aria-labelledby
+      const labelledBy = el.getAttribute("aria-labelledby");
+      if (labelledBy) {
+        const refEl = document.getElementById(labelledBy);
+        if (refEl?.textContent?.trim()) return refEl.textContent.trim();
+      }
+      // 4. Wrapping <label>
+      const parentLabel = el.closest("label");
+      if (parentLabel) {
+        const clone = parentLabel.cloneNode(true) as HTMLElement;
+        clone.querySelectorAll("input,select,textarea").forEach((c) => c.remove());
+        if (clone.textContent?.trim()) return clone.textContent.trim();
+      }
+      // 5. Placeholder
+      const placeholder = el.getAttribute("placeholder");
+      if (placeholder) return placeholder;
+      // 6. Name attribute as last resort
+      const name = el.getAttribute("name");
+      if (name) return name.replace(/[_-]/g, " ");
+      return "";
+    }
+
+    function isFieldVisible(el: HTMLElement): boolean {
+      if (el.offsetParent === null && el.style.position !== "fixed") return false;
+      const style = window.getComputedStyle(el);
+      return style.display !== "none" && style.visibility !== "hidden";
+    }
+
+    function detectForms(): ExtractedFormField[] {
+      const fields: ExtractedFormField[] = [];
+      const inputs = document.querySelectorAll<HTMLElement>(
+        "input, select, textarea"
+      );
+
+      for (const el of inputs) {
+        const inputType = (el.getAttribute("type") ?? (el.tagName === "SELECT" ? "select" : el.tagName === "TEXTAREA" ? "textarea" : "text")).toLowerCase();
+
+        // Skip hidden, submit, button, and image inputs
+        if (["hidden", "submit", "button", "image", "reset"].includes(inputType)) continue;
+        if (!isFieldVisible(el)) continue;
+
+        const label = extractFieldLabel(el);
+
+        let options: string[] | undefined;
+        if (el.tagName === "SELECT") {
+          options = Array.from((el as HTMLSelectElement).options)
+            .filter((o) => o.value && !o.disabled)
+            .map((o) => o.textContent?.trim() ?? o.value)
+            .slice(0, 20);
+        }
+
+        fields.push({
+          selector: getFieldSelector(el),
+          tagName: el.tagName.toLowerCase(),
+          inputType,
+          label,
+          name: el.getAttribute("name") ?? "",
+          placeholder: el.getAttribute("placeholder") ?? "",
+          required: el.hasAttribute("required") || el.getAttribute("aria-required") === "true",
+          options,
+        });
+      }
+
+      return fields;
+    }
+
+    // ── Form Guidance Display ──
+
+    function applyFormGuidance(guidance: FormFieldGuidance[]) {
+      // Inject form help styles
+      if (!document.getElementById("ivy-form-help-styles")) {
+        const style = document.createElement("style");
+        style.id = "ivy-form-help-styles";
+        style.textContent = `
+          .ivy-form-field-wrapper {
+            position: relative;
+            display: inline-block;
+          }
+          .ivy-form-help-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #7c3aed;
+            color: white;
+            font-size: 11px;
+            font-weight: bold;
+            font-family: system-ui, sans-serif;
+            cursor: help;
+            margin-left: 4px;
+            vertical-align: middle;
+            user-select: none;
+            flex-shrink: 0;
+            position: relative;
+          }
+          .ivy-form-help-icon:hover {
+            background: #6d28d9;
+          }
+          .ivy-form-help-tip {
+            position: absolute;
+            bottom: calc(100% + 8px);
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1f2937;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: normal;
+            line-height: 1.4;
+            max-width: 280px;
+            min-width: 180px;
+            white-space: normal;
+            z-index: 2147483647;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            font-family: system-ui, sans-serif;
+            text-align: left;
+            pointer-events: none;
+          }
+          .ivy-form-help-tip::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            border: 5px solid transparent;
+            border-top-color: #1f2937;
+          }
+        `;
+        document.head.appendChild(style);
+      }
+
+      for (const field of guidance) {
+        try {
+          const el = document.querySelector(field.selector) as HTMLElement | null;
+          if (!el) continue;
+
+          // Don't add duplicate help icons
+          if (el.nextElementSibling?.classList.contains("ivy-form-help-icon")) continue;
+
+          const icon = document.createElement("span");
+          icon.className = "ivy-form-help-icon";
+          icon.textContent = "?";
+
+          // Build tooltip on hover using real DOM elements
+          let tipEl: HTMLElement | null = null;
+
+          icon.addEventListener("mouseenter", () => {
+            if (tipEl) return;
+            tipEl = document.createElement("div");
+            tipEl.className = "ivy-form-help-tip";
+            tipEl.textContent = field.explanation;
+            if (field.required) {
+              tipEl.textContent += " (Required)";
+            }
+            if (field.example) {
+              const ex = document.createElement("div");
+              ex.style.cssText = "margin-top:4px;font-family:monospace;font-size:12px;opacity:0.7;";
+              ex.textContent = `e.g. ${field.example}`;
+              tipEl.appendChild(ex);
+            }
+            icon.appendChild(tipEl);
+          });
+
+          icon.addEventListener("mouseleave", () => {
+            tipEl?.remove();
+            tipEl = null;
+          });
+
+          // Insert icon after the field
+          el.parentNode?.insertBefore(icon, el.nextSibling);
+        } catch {
+          // Selector may not match; skip gracefully
+        }
+      }
+    }
+
+    function removeFormGuidance() {
+      document.querySelectorAll(".ivy-form-help-icon").forEach((el) => el.remove());
+    }
+
     // ── CSS Accessibility Adjustments ──
 
     function applyAccessibilityCSS(prefs: {
@@ -435,8 +642,28 @@ export default defineContentScript({
           }
           break;
 
+        case "SCAN_FOR_FORMS": {
+          const formFields = detectForms();
+          sendResponse({
+            type: "FORM_DETECTED",
+            payload: {
+              url: window.location.href,
+              title: document.title,
+              fields: formFields,
+            },
+          });
+          break;
+        }
+
+        case "FORM_GUIDANCE_RESULT":
+          applyFormGuidance(
+            (msg as FormGuidanceResultMessage).payload.guidance
+          );
+          break;
+
         case "UNDO_TRANSFORMS":
           undoTransforms();
+          removeFormGuidance();
           break;
       }
     });
