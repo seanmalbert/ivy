@@ -95,7 +95,7 @@ No markdown fences, no commentary.`,
 }
 
 /** Fallback if AI ranking fails — return results with generic explanations */
-function fallbackResults(results: EligibilityResult[]): BenefitRecommendation[] {
+export function fallbackResults(results: EligibilityResult[]): BenefitRecommendation[] {
   return results.map((r) => ({
     benefitId: r.benefit.id,
     benefit: r.benefit,
