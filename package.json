@@ -1,5 +1,6 @@
 {
   "name": "ivy",
+  "version": "0.1.1",
   "private": true,
   "packageManager": "pnpm@9.15.4",
   "scripts": {
@@ -9,7 +10,9 @@
     "typecheck": "turbo typecheck",
     "clean": "turbo clean",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "version:bump": "./scripts/bump-version.sh",
+    "package:extension": "./scripts/package-extension.sh"
   },
   "devDependencies": {
     "turbo": "^2.4.0",
