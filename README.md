@@ -4,11 +4,12 @@ AI browser extension that takes real human inputs to personalize content, flag e
 
 ## Features
 
-- **Content Simplification** -- Rewrites web pages at a reading level you choose, adds plain-language tooltips for jargon, and adjusts font size, contrast, and motion (prototyped)
-- **Benefits Discovery** -- Matches your profile against federal benefit programs using a deterministic rules engine, then ranks and explains results in plain language via AI (prototyped)
-- **Highlight-to-Ask** -- Select any text on a page and ask Ivy to explain it (prototyped)
-- **Form Guidance** -- Step-by-step explanations for government forms (planned)
-- **Feedback Loop** -- Users provide natural language feedback on websites; aggregated insights can be supplied to site owners to improve accessibility (planned)
+- **Content Simplification** -- Rewrites web pages at a reading level you choose, adds plain-language tooltips for jargon, and adjusts font size, contrast, and motion
+- **Benefits Discovery** -- Matches your profile against federal benefit programs using a deterministic rules engine, then ranks and explains results in plain language via AI
+- **Highlight-to-Ask** -- Select any text on a page and ask Ivy to explain it in a centered dialog with markdown rendering. Responses are cached per URL so repeat queries are instant across all users
+- **Form Guidance** -- Detects form fields on any page, generates plain-language explanations via AI, and displays hover tooltips next to each field. Maps fields to vault types for future auto-fill
+- **Feedback Loop** -- Users leave anchored feedback on specific page elements via "Leave site feedback" on the highlight-ask dialog or the Feedback tab. AI categorizes comments (confusing language, missing info, accessibility, etc.) and stores them with CSS selector location data
+- **Government Dashboard** -- Web app for site owners showing aggregated user interactions per domain and page. Renders a proxied page preview with highlighted elements where users interacted. Shows Ivy's AI responses, commonly asked questions, and feedback category distribution. Site owners can edit Ivy's cached responses via API
 
 ## Wireframes
 
@@ -102,10 +103,20 @@ Chrome Extension (WXT)
         ▼  HTTPS
 Server (Node.js + Hono)
 ├── AI Transform Pipeline (Claude API)
-├── Explain Endpoint
-└── Benefits Evaluation
-    ├── Deterministic Rules Engine (@ivy/benefits-engine)
-    └── AI Ranking & Explanation (Claude Haiku)
+├── Explain Endpoint (with response caching)
+├── Form Guidance Endpoint
+├── Feedback + Categorization (Claude Haiku)
+├── Benefits Evaluation
+│   ├── Deterministic Rules Engine (@ivy/benefits-engine)
+│   └── AI Ranking & Explanation (Claude Haiku)
+└── Dashboard API
+    ├── Domain/page aggregation
+    ├── Page proxy for preview
+    └── Response management
+
+Dashboard (Vite + React)
+├── Domain Overview (page list, category chart, top questions)
+└── Page Detail (proxied page preview with element highlights, insights panel)
 ```
 
 ## Monorepo Structure
@@ -116,7 +127,9 @@ ivy/
 │   ├── shared/           # Types, message protocol, encryption utils, constants
 │   ├── extension/        # WXT Chrome extension (MV3)
 │   ├── server/           # Node.js API server (Hono)
+│   ├── dashboard/        # Site owner dashboard (Vite + React)
 │   └── benefits-engine/  # Deterministic eligibility rules
+├── scripts/              # Version bump and packaging scripts
 ├── .github/workflows/    # CI (build, test, typecheck)
 ├── Dockerfile            # Multi-stage production build for server
 ├── turbo.json
@@ -128,13 +141,15 @@ ivy/
 | Layer | Technology |
 |-------|-----------|
 | Extension framework | [WXT](https://wxt.dev) (MV3, cross-browser) |
-| UI | React 19, Radix UI, Tailwind CSS 4 |
-| State management | Zustand (persisted to chrome.storage) |
+| Extension UI | React 19, Radix UI, Tailwind CSS 4, Zustand |
+| Dashboard | Vite, React 19, React Router, Tailwind CSS 4 |
 | Server | Node.js 22, Hono |
-| AI | Claude API via `@anthropic-ai/sdk` |
+| AI | Claude API via `@anthropic-ai/sdk` (Haiku for most tasks, Sonnet for translation) |
+| Benefits engine | Deterministic rules with AI ranking |
 | Monorepo | Turborepo, pnpm workspaces |
-| Testing | Vitest |
+| Testing | Vitest (180 tests) |
 | Client encryption | Web Crypto API (AES-256-GCM) |
+| Deployment | Railway (server), GitHub Actions (CI) |
 
 ## Getting Started
 
@@ -157,7 +172,7 @@ cp .env.example .env.local
 
 ### Development
 
-Run the server and extension in separate terminals:
+Run the server, extension, and dashboard in separate terminals:
 
 ```bash
 # Terminal 1: Start the API server (port 3001)
@@ -165,9 +180,20 @@ pnpm --filter @ivy/server dev
 
 # Terminal 2: Start the extension dev server (opens Chrome with extension loaded)
 pnpm --filter @ivy/extension dev
+
+# Terminal 3: Start the dashboard dev server (port 5173)
+pnpm --filter @ivy/dashboard dev
 ```
 
 The extension dev server uses WXT's hot module replacement. The Chrome profile is stored in `packages/extension/.chrome-profile/` so your extension state persists across restarts.
+
+### Package Extension for Testing
+
+```bash
+# Bump version and build/zip the extension
+pnpm version:bump        # patch by default, or: ./scripts/bump-version.sh minor
+pnpm package:extension   # builds and zips to dist/ivy-extension-{version}.zip
+```
 
 ### Build
 
