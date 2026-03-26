@@ -531,6 +531,10 @@ export default defineContentScript({
 
     // ── Highlight-and-Ask ──
 
+    // Track the last highlight context for the Reply feature
+    let lastHighlightSelector = "";
+    let lastHighlightText = "";
+
     function showFloatingButton(x: number, y: number, selectedText: string) {
       removeFloatingButton();
 
@@ -546,11 +550,13 @@ export default defineContentScript({
       `;
 
       floatingButton.addEventListener("click", () => {
-        const selContext =
-          window.getSelection()?.anchorNode?.parentElement?.textContent?.slice(
-            0,
-            500
-          ) ?? "";
+        const anchorEl = window.getSelection()?.anchorNode?.parentElement;
+        const selContext = anchorEl?.textContent?.slice(0, 500) ?? "";
+        const selSelector = anchorEl ? getUniqueSelector(anchorEl) : "";
+
+        // Save for Reply feature
+        lastHighlightSelector = selSelector;
+        lastHighlightText = selectedText;
 
         // Show loading state
         floatingButton!.textContent = "Thinking...";
@@ -559,7 +565,12 @@ export default defineContentScript({
 
         chrome.runtime.sendMessage({
           type: "HIGHLIGHT_ASK",
-          payload: { selectedText, context: selContext },
+          payload: {
+            selectedText,
+            context: selContext,
+            selector: selSelector,
+            url: window.location.href,
+          },
         });
       });
 
@@ -669,39 +680,242 @@ export default defineContentScript({
     });
 
     function showAnswerTooltip(answer: string) {
-      const existing = document.getElementById("ivy-answer-tooltip");
+      const existing = document.getElementById("ivy-answer-overlay");
       if (existing) existing.remove();
 
-      const selection = window.getSelection();
-      const range = selection?.getRangeAt(0);
-      const rect = range?.getBoundingClientRect();
-      if (!rect) return;
+      // Capture context at dialog creation time (selection may change later)
+      const replySelector = lastHighlightSelector;
+      const replySelectedText = lastHighlightText;
 
-      const tooltip = document.createElement("div");
-      tooltip.id = "ivy-answer-tooltip";
-      tooltip.style.cssText = `
-        position:fixed;
-        left:${Math.min(rect.left, window.innerWidth - 340)}px;
-        top:${rect.bottom + 8}px;
-        background:white; border:1px solid #e5e7eb; border-radius:12px;
-        z-index:2147483647; box-shadow:0 4px 16px rgba(0,0,0,0.12);
-        max-width:320px; padding:12px; font-size:14px; line-height:1.5;
+      // Backdrop
+      const overlay = document.createElement("div");
+      overlay.id = "ivy-answer-overlay";
+      overlay.style.cssText = `
+        position:fixed; inset:0; background:rgba(0,0,0,0.4);
+        z-index:2147483646; display:flex; align-items:center; justify-content:center;
         font-family:system-ui,sans-serif;
       `;
+      overlay.addEventListener("click", (e) => {
+        if (e.target === overlay) overlay.remove();
+      });
 
-      const text = document.createElement("div");
-      text.textContent = answer;
-      tooltip.appendChild(text);
+      // Dialog
+      const dialog = document.createElement("div");
+      dialog.style.cssText = `
+        background:white; border-radius:16px; box-shadow:0 8px 32px rgba(0,0,0,0.2);
+        width:420px; max-width:90vw; max-height:80vh; overflow-y:auto;
+        padding:24px; font-size:14px; line-height:1.6; color:#1f2937;
+      `;
+
+      // Header
+      const header = document.createElement("div");
+      header.style.cssText = "display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;";
+      const title = document.createElement("div");
+      title.style.cssText = "display:flex; align-items:center; gap:8px;";
+      const badge = document.createElement("span");
+      badge.style.cssText = "background:#7c3aed; color:white; font-size:11px; font-weight:bold; padding:2px 8px; border-radius:6px;";
+      badge.textContent = "Ivy";
+      title.appendChild(badge);
+      const titleText = document.createElement("span");
+      titleText.style.cssText = "font-size:13px; font-weight:600; color:#374151;";
+      titleText.textContent = "Explanation";
+      title.appendChild(titleText);
+      header.appendChild(title);
+
+      const closeX = document.createElement("button");
+      closeX.textContent = "\u00d7";
+      closeX.style.cssText = "background:none; border:none; font-size:20px; color:#9ca3af; cursor:pointer; padding:0 4px; line-height:1;";
+      closeX.addEventListener("click", () => overlay.remove());
+      header.appendChild(closeX);
+      dialog.appendChild(header);
+
+      // Highlighted text quote
+      if (replySelectedText) {
+        const quote = document.createElement("div");
+        quote.style.cssText = `
+          background:#f9fafb; border-left:3px solid #7c3aed; padding:10px 14px;
+          border-radius:0 8px 8px 0; margin-bottom:16px; font-size:13px;
+          color:#6b7280; font-style:italic;
+        `;
+        quote.textContent = replySelectedText.length > 200
+          ? replySelectedText.slice(0, 200) + "..."
+          : replySelectedText;
+        dialog.appendChild(quote);
+      }
+
+      // Answer -- render with basic markdown-like formatting (safe, no innerHTML from AI)
+      const answerEl = document.createElement("div");
+      answerEl.style.cssText = "margin-bottom:20px; color:#1f2937;";
+
+      const lines = answer.split("\n");
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+
+        // Markdown headers
+        const headerMatch = trimmed.match(/^(#{1,3})\s+(.+)/);
+        if (headerMatch) {
+          const level = headerMatch[1].length;
+          const heading = document.createElement(level === 1 ? "h3" : level === 2 ? "h4" : "h5");
+          heading.textContent = headerMatch[2];
+          const sizes: Record<number, string> = { 1: "15px", 2: "14px", 3: "13px" };
+          heading.style.cssText = `font-size:${sizes[level]}; font-weight:600; color:#111827; margin:12px 0 6px 0;`;
+          answerEl.appendChild(heading);
+          continue;
+        }
+
+        // Bullet points
+        if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
+          const li = document.createElement("div");
+          li.style.cssText = "padding-left:16px; position:relative; margin:4px 0;";
+          const bullet = document.createElement("span");
+          bullet.style.cssText = "position:absolute; left:4px; color:#7c3aed;";
+          bullet.textContent = "\u2022";
+          li.appendChild(bullet);
+          const text = document.createElement("span");
+          text.textContent = trimmed.slice(2);
+          li.appendChild(text);
+          answerEl.appendChild(li);
+          continue;
+        }
+
+        // Regular paragraph
+        const p = document.createElement("p");
+        p.style.cssText = "margin:6px 0;";
+        // Handle inline bold **text**
+        const parts = trimmed.split(/(\*\*[^*]+\*\*)/g);
+        for (const part of parts) {
+          if (part.startsWith("**") && part.endsWith("**")) {
+            const bold = document.createElement("strong");
+            bold.textContent = part.slice(2, -2);
+            p.appendChild(bold);
+          } else {
+            p.appendChild(document.createTextNode(part));
+          }
+        }
+        answerEl.appendChild(p);
+      }
+
+      dialog.appendChild(answerEl);
+
+      // Button row
+      const btnRow = document.createElement("div");
+      btnRow.style.cssText = "display:flex; gap:8px; justify-content:flex-end;";
+
+      const replyBtn = document.createElement("button");
+      replyBtn.textContent = "Leave site feedback";
+      replyBtn.style.cssText = `
+        background:white; border:1px solid #e5e7eb; color:#7c3aed; border-radius:8px;
+        padding:8px 16px; cursor:pointer; font-size:13px; font-weight:500;
+        font-family:system-ui,sans-serif;
+      `;
+      replyBtn.addEventListener("mouseenter", () => { replyBtn.style.background = "#f5f3ff"; });
+      replyBtn.addEventListener("mouseleave", () => { replyBtn.style.background = "white"; });
+      replyBtn.addEventListener("click", () => {
+        btnRow.remove();
+
+        const inputSection = document.createElement("div");
+        inputSection.style.cssText = "border-top:1px solid #e5e7eb; padding-top:16px;";
+
+        const inputLabel = document.createElement("div");
+        inputLabel.style.cssText = "font-size:13px; font-weight:500; color:#374151; margin-bottom:4px;";
+        inputLabel.textContent = "Feedback about this page";
+        inputSection.appendChild(inputLabel);
+
+        const inputHint = document.createElement("div");
+        inputHint.style.cssText = "font-size:12px; color:#9ca3af; margin-bottom:8px;";
+        inputHint.textContent = "Your feedback is about the website content you highlighted, not Ivy's explanation. This helps site owners improve their pages.";
+        inputSection.appendChild(inputHint);
+
+        const input = document.createElement("textarea");
+        input.placeholder = "e.g. This section was hard to understand because...";
+        input.style.cssText = `
+          width:100%; min-height:72px; border:1px solid #e5e7eb; border-radius:8px;
+          padding:10px; font-size:13px; font-family:system-ui,sans-serif;
+          resize:vertical; box-sizing:border-box; outline:none;
+        `;
+        input.addEventListener("focus", () => { input.style.borderColor = "#7c3aed"; });
+        input.addEventListener("blur", () => { input.style.borderColor = "#e5e7eb"; });
+        inputSection.appendChild(input);
+
+        const sendRow = document.createElement("div");
+        sendRow.style.cssText = "display:flex; gap:8px; margin-top:10px; justify-content:flex-end;";
+
+        const cancelBtn = document.createElement("button");
+        cancelBtn.textContent = "Cancel";
+        cancelBtn.style.cssText = `
+          background:none; border:1px solid #e5e7eb; color:#6b7280; border-radius:8px;
+          padding:8px 16px; cursor:pointer; font-size:13px; font-family:system-ui,sans-serif;
+        `;
+        cancelBtn.addEventListener("click", () => overlay.remove());
+
+        const sendBtn = document.createElement("button");
+        sendBtn.textContent = "Send Feedback";
+        sendBtn.style.cssText = `
+          background:#7c3aed; color:white; border:none; border-radius:8px;
+          padding:8px 16px; cursor:pointer; font-size:13px; font-weight:500;
+          font-family:system-ui,sans-serif;
+        `;
+        sendBtn.addEventListener("click", () => {
+          const comment = input.value.trim();
+          if (!comment) return;
+
+          sendBtn.textContent = "Sending...";
+          sendBtn.style.opacity = "0.7";
+          sendBtn.style.pointerEvents = "none";
+
+          chrome.runtime.sendMessage({
+            type: "SUBMIT_FEEDBACK",
+            payload: {
+              url: window.location.href,
+              selector: replySelector || "body",
+              comment,
+              selectedText: replySelectedText,
+            },
+          });
+
+          // Show confirmation
+          dialog.innerHTML = "";
+          const confirmEl = document.createElement("div");
+          confirmEl.style.cssText = "text-align:center; padding:32px 16px;";
+          const checkmark = document.createElement("div");
+          checkmark.style.cssText = "font-size:32px; margin-bottom:12px;";
+          checkmark.textContent = "\u2713";
+          confirmEl.appendChild(checkmark);
+          const msg = document.createElement("div");
+          msg.style.cssText = "font-size:15px; font-weight:500; color:#059669;";
+          msg.textContent = "Thanks for your feedback!";
+          confirmEl.appendChild(msg);
+          const sub = document.createElement("div");
+          sub.style.cssText = "font-size:13px; color:#6b7280; margin-top:4px;";
+          sub.textContent = "This helps improve the site for everyone.";
+          confirmEl.appendChild(sub);
+          dialog.appendChild(confirmEl);
+          setTimeout(() => overlay.remove(), 2500);
+        });
+
+        sendRow.appendChild(cancelBtn);
+        sendRow.appendChild(sendBtn);
+        inputSection.appendChild(sendRow);
+        dialog.appendChild(inputSection);
+        input.focus();
+      });
 
       const closeBtn = document.createElement("button");
       closeBtn.textContent = "Close";
-      closeBtn.style.cssText =
-        "display:block;margin-top:8px;margin-left:auto;background:none;border:none;color:#7c3aed;cursor:pointer;font-size:12px;";
-      closeBtn.addEventListener("click", () => tooltip.remove());
-      tooltip.appendChild(closeBtn);
+      closeBtn.style.cssText = `
+        background:#f3f4f6; border:none; color:#374151; border-radius:8px;
+        padding:8px 16px; cursor:pointer; font-size:13px;
+        font-family:system-ui,sans-serif;
+      `;
+      closeBtn.addEventListener("click", () => overlay.remove());
 
-      document.body.appendChild(tooltip);
-      setTimeout(() => tooltip.remove(), 30000);
+      btnRow.appendChild(replyBtn);
+      btnRow.appendChild(closeBtn);
+      dialog.appendChild(btnRow);
+
+      overlay.appendChild(dialog);
+      document.body.appendChild(overlay);
     }
 
     // ── Initialize ──

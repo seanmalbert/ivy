@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as Tabs from "@radix-ui/react-tabs";
 import { usePreferencesStore, useTransformStore, useBenefitsStore, useEligibilityStore, useFormGuidanceStore } from "../lib/store";
 import { PreferenceChat } from "./PreferenceChat";
@@ -6,8 +6,10 @@ import { PreferencesPanel } from "./PreferencesPanel";
 import { EligibilityForm } from "./EligibilityForm";
 import { BenefitsResults } from "./BenefitsResults";
 import { FormGuidancePanel } from "./FormGuidancePanel";
+import { FeedbackPanel } from "./FeedbackPanel";
 
 export function Sidebar() {
+  const [activeTab, setActiveTab] = useState("home");
   const { isOnboarded, isEnabled, setEnabled } = usePreferencesStore();
   const { status, lastTransformMs, wasCached, transformedCount, error, setResult, setStatus, setError, reset } =
     useTransformStore();
@@ -140,14 +142,14 @@ export function Sidebar() {
       </header>
 
       {/* Tabs */}
-      <Tabs.Root defaultValue="home" className="flex-1 flex flex-col min-h-0">
-        <Tabs.List className="flex border-b border-gray-200 px-4">
-          {["home", "forms", "benefits", "settings"].map((tab) => (
+      <Tabs.Root value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
+        <Tabs.List className="flex border-b border-gray-200 px-2">
+          {["home", "forms", "benefits", "feedback", "settings"].map((tab) => (
             <Tabs.Trigger
               key={tab}
               value={tab}
               data-value={tab}
-              className="px-3 py-2 text-sm text-gray-500 capitalize border-b-2 border-transparent data-[state=active]:border-violet-600 data-[state=active]:text-violet-700 transition-colors"
+              className="flex-1 px-1 py-2 text-xs text-gray-500 capitalize border-b-2 border-transparent data-[state=active]:border-violet-600 data-[state=active]:text-violet-700 transition-colors text-center"
             >
               {tab}
             </Tabs.Trigger>
@@ -202,8 +204,7 @@ export function Sidebar() {
                 </button>
                 <button
                   onClick={() => {
-                    const formsTab = document.querySelector('[data-value="forms"]') as HTMLElement | null;
-                    formsTab?.click();
+                    setActiveTab("forms");
                     chrome.runtime.sendMessage({
                       type: "SCAN_FOR_FORMS",
                       payload: {},
@@ -223,13 +224,21 @@ export function Sidebar() {
                 </button>
                 <button
                   onClick={() => {
-                    const benefitsTab = document.querySelector('[data-value="benefits"]') as HTMLElement | null;
-                    benefitsTab?.click();
+                    setActiveTab("benefits");
                   }}
                   disabled={!isEnabled}
                   className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-gray-50 transition-colors disabled:opacity-50"
                 >
                   Find benefits for me
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveTab("feedback");
+                  }}
+                  disabled={!isEnabled}
+                  className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-gray-50 transition-colors disabled:opacity-50"
+                >
+                  Share feedback
                 </button>
               </div>
             </div>
@@ -319,6 +328,10 @@ export function Sidebar() {
               )}
             </div>
           )}
+        </Tabs.Content>
+
+        <Tabs.Content value="feedback" className="flex-1 overflow-y-auto p-4">
+          <FeedbackPanel />
         </Tabs.Content>
 
         <Tabs.Content value="settings" className="flex-1 overflow-y-auto">

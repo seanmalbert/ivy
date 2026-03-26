@@ -7,6 +7,9 @@ import { transformContent } from "./ai/transform.js";
 import { explainText } from "./ai/explain.js";
 import { rankAndExplainBenefits } from "./ai/benefits.js";
 import { generateFormGuidance } from "./ai/form-guidance.js";
+import { categorizeFeedback } from "./ai/categorize.js";
+import { addInteraction, getAggregatedInsights, getPageInsights } from "./feedback/store.js";
+import type { InteractionType } from "./feedback/store.js";
 import { evaluateEligibility, FEDERAL_RULES } from "@ivy/benefits-engine";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -284,11 +287,111 @@ app.post("/api/form-guidance", async (c) => {
   }
 });
 
-// ── Events (fire-and-forget, no DB required) ──
+// ── Events (enriched with location data for feedback loop) ──
+
+const EVENT_TYPE_MAP: Record<string, InteractionType> = {
+  transform_accepted: "simplified",
+  highlight_ask: "asked",
+  form_guidance_used: "form-help",
+};
 
 app.post("/api/events", async (c) => {
-  // Accept and acknowledge — no DB for now
-  return c.json({ success: true, data: { id: crypto.randomUUID() } });
+  try {
+    const body = await c.req.json<{
+      eventType: string;
+      context: Record<string, unknown>;
+    }>();
+
+    const mappedType = EVENT_TYPE_MAP[body.eventType];
+    if (mappedType && body.context?.url) {
+      const url = body.context.url as string;
+      const parsed = new URL(url);
+
+      // For events with multiple selectors (transforms, form help), store one per selector
+      const selectors = (body.context.selectors as string[]) ?? [];
+      const singleSelector = (body.context.selector as string) ?? "";
+      const allSelectors = selectors.length > 0 ? selectors : singleSelector ? [singleSelector] : ["body"];
+
+      for (const selector of allSelectors.slice(0, 30)) {
+        addInteraction({
+          domain: parsed.hostname,
+          urlPath: parsed.pathname,
+          fullUrl: url,
+          selector,
+          eventType: mappedType,
+          content: (body.context.text as string) ?? "",
+        });
+      }
+    }
+
+    return c.json({ success: true, data: { id: crypto.randomUUID() } });
+  } catch {
+    return c.json({ success: true, data: { id: crypto.randomUUID() } });
+  }
+});
+
+// ── User Feedback (anchored comments) ──
+
+const MAX_COMMENT_LENGTH = 2000;
+
+app.post("/api/feedback", async (c) => {
+  const body = await c.req.json<{
+    url: string;
+    selector: string;
+    comment: string;
+    selectedText?: string;
+  }>();
+
+  if (!body.comment || typeof body.comment !== "string") {
+    return validationError(c, "comment is required and must be a string");
+  }
+  if (body.comment.length > MAX_COMMENT_LENGTH) {
+    return validationError(c, `comment exceeds maximum length of ${MAX_COMMENT_LENGTH}`);
+  }
+  if (!body.url || typeof body.url !== "string") {
+    return validationError(c, "url is required and must be a string");
+  }
+
+  try {
+    const parsed = new URL(body.url);
+    const { category, confidence } = await categorizeFeedback(
+      body.comment,
+      body.url,
+      body.selector ?? "body"
+    );
+
+    const interaction = addInteraction({
+      domain: parsed.hostname,
+      urlPath: parsed.pathname,
+      fullUrl: body.url,
+      selector: body.selector ?? "body",
+      eventType: "comment",
+      content: body.comment,
+      category,
+    });
+
+    return c.json({
+      success: true,
+      data: { id: interaction.id, category, confidence },
+    });
+  } catch (err) {
+    return handleApiError(err, c, "FEEDBACK_FAILED");
+  }
+});
+
+// ── Dashboard (site owner view, no API key required) ──
+
+app.get("/dashboard/:domain", (c) => {
+  const domain = c.req.param("domain");
+  const insights = getAggregatedInsights(domain);
+  return c.json({ success: true, data: insights });
+});
+
+app.get("/dashboard/:domain/page", (c) => {
+  const domain = c.req.param("domain");
+  const path = c.req.query("path") ?? "/";
+  const insights = getPageInsights(domain, path);
+  return c.json({ success: true, data: insights });
 });
 
 // ── Health ──

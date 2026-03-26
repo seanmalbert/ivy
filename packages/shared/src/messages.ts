@@ -23,6 +23,7 @@ export type IvyMessage =
   | ScanForFormsMessage
   | FormDetectedMessage
   | FormGuidanceResultMessage
+  | SubmitFeedbackMessage
   | UndoTransformsMessage
   | ErrorMessage;
 
@@ -54,6 +55,8 @@ export interface HighlightAskMessage {
     selectedText: string;
     context: string; // surrounding paragraph
     question?: string;
+    selector?: string; // CSS selector of the highlighted element
+    url?: string;
   };
 }
 
@@ -154,6 +157,18 @@ export interface FormGuidanceResultMessage {
     guidance: FormFieldGuidance[];
     cached: boolean;
     processingMs: number;
+  };
+}
+
+// ── Feedback ──
+
+export interface SubmitFeedbackMessage {
+  type: "SUBMIT_FEEDBACK";
+  payload: {
+    url: string;
+    selector: string;
+    comment: string;
+    selectedText?: string;
   };
 }
 

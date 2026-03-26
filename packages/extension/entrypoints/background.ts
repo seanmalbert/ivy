@@ -231,7 +231,9 @@ export default defineBackground(() => {
               handleHighlightAsk(
                 message.payload.selectedText,
                 message.payload.context,
-                tabId
+                tabId,
+                message.payload.selector,
+                message.payload.url
               )
             )
             .then(sendResponse);
@@ -248,6 +250,11 @@ export default defineBackground(() => {
             ? Promise.resolve(sender.tab.id)
             : getActiveTabId();
           tabIdPromise.then((tabId) => handleScanForForms(tabId)).then(sendResponse);
+          return true;
+        }
+
+        case "SUBMIT_FEEDBACK": {
+          handleSubmitFeedback(message.payload).then(sendResponse);
           return true;
         }
 
@@ -406,6 +413,7 @@ export default defineBackground(() => {
 
       trackEvent("transform_accepted", {
         url: pageContent.url,
+        selectors: cloudResult.instructions.map((i) => i.selector),
         instructionCount: cloudResult.instructions.length,
         processingMs: totalMs,
       });
@@ -603,6 +611,7 @@ export default defineBackground(() => {
 
         trackEvent("form_guidance_used", {
           url: formData.url,
+          selectors: formData.fields.map((f) => f.selector),
           fieldCount: formData.fields.length,
           guidanceCount: result.data.guidance.length,
           processingMs: result.data.processingMs,
@@ -621,10 +630,79 @@ export default defineBackground(() => {
     }
   }
 
+  async function handleSubmitFeedback(payload: {
+    url: string;
+    selector: string;
+    comment: string;
+    selectedText?: string;
+  }) {
+    chrome.runtime.sendMessage({
+      type: "FEEDBACK_STATUS",
+      payload: { status: "submitting" },
+    }).catch(() => {});
+
+    try {
+      // If no URL provided, get it from the active tab
+      let url = payload.url;
+      if (!url) {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        url = tab?.url ?? "";
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/feedback`, {
+        method: "POST",
+        headers: apiHeaders(),
+        body: JSON.stringify({
+          url,
+          selector: payload.selector ?? "body",
+          comment: payload.comment,
+          selectedText: payload.selectedText,
+        }),
+      });
+
+      if (!response.ok) {
+        chrome.runtime.sendMessage({
+          type: "FEEDBACK_STATUS",
+          payload: { status: "error", message: "Failed to submit feedback" },
+        }).catch(() => {});
+        return;
+      }
+
+      const result = (await response.json()) as {
+        success: boolean;
+        data?: { id: string; category: string; confidence: number };
+      };
+
+      if (result.success && result.data) {
+        chrome.runtime.sendMessage({
+          type: "FEEDBACK_STATUS",
+          payload: {
+            status: "done",
+            id: result.data.id,
+            category: result.data.category,
+          },
+        }).catch(() => {});
+
+        trackEvent("feedback_submitted", {
+          url,
+          selector: payload.selector,
+          category: result.data.category,
+        });
+      }
+    } catch {
+      chrome.runtime.sendMessage({
+        type: "FEEDBACK_STATUS",
+        payload: { status: "error", message: "Could not connect to feedback service" },
+      }).catch(() => {});
+    }
+  }
+
   async function handleHighlightAsk(
     selectedText: string,
     context: string,
-    tabId?: number
+    tabId?: number,
+    selector?: string,
+    url?: string
   ) {
     if (!tabId) return;
 
@@ -640,7 +718,7 @@ export default defineBackground(() => {
         type: "HIGHLIGHT_ANSWER",
         payload: { answer: onDeviceAnswer },
       });
-      trackEvent("highlight_ask", { text: selectedText.slice(0, 100), source: "on-device" });
+      trackEvent("highlight_ask", { url, selector, text: selectedText.slice(0, 100), source: "on-device" });
       return;
     }
 
@@ -655,7 +733,7 @@ export default defineBackground(() => {
         type: "HIGHLIGHT_ANSWER",
         payload: { answer },
       });
-      trackEvent("highlight_ask", { text: selectedText.slice(0, 100), source: "cloud" });
+      trackEvent("highlight_ask", { url, selector, text: selectedText.slice(0, 100), source: "cloud" });
     } else {
       chrome.tabs.sendMessage(tabId, {
         type: "ERROR",
