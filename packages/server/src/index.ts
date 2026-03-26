@@ -9,6 +9,7 @@ import { rankAndExplainBenefits } from "./ai/benefits.js";
 import { generateFormGuidance } from "./ai/form-guidance.js";
 import { categorizeFeedback } from "./ai/categorize.js";
 import { addInteraction, getAggregatedInsights, getPageInsights } from "./feedback/store.js";
+import { getCachedResponse, setCachedResponse, updateCachedResponse, getAllCachedResponses } from "./feedback/response-cache.js";
 import type { InteractionType } from "./feedback/store.js";
 import { evaluateEligibility, FEDERAL_RULES } from "@ivy/benefits-engine";
 
@@ -136,6 +137,7 @@ app.post("/api/explain", async (c) => {
   const body = await c.req.json<{
     text: string;
     context: string;
+    url?: string;
     readingLevel?: string;
   }>();
 
@@ -149,7 +151,23 @@ app.post("/api/explain", async (c) => {
     return validationError(c, "invalid readingLevel");
   }
 
+  const pageUrl = body.url ?? "";
   const startTime = Date.now();
+
+  // Check response cache first (keyed by URL + text)
+  const cached = getCachedResponse(pageUrl, body.text);
+  if (cached) {
+    return c.json({
+      success: true,
+      data: {
+        answer: cached.response,
+        cached: true,
+        responseId: cached.id,
+        editedBy: cached.editedBy ?? null,
+        processingMs: Date.now() - startTime,
+      },
+    });
+  }
 
   try {
     const answer = await explainText(
@@ -158,11 +176,15 @@ app.post("/api/explain", async (c) => {
       body.readingLevel
     );
 
+    // Cache the response keyed by URL + text
+    const entry = setCachedResponse(pageUrl, body.text, answer);
+
     return c.json({
       success: true,
       data: {
         answer,
         cached: false,
+        responseId: entry.id,
         processingMs: Date.now() - startTime,
       },
     });
@@ -312,6 +334,8 @@ app.post("/api/events", async (c) => {
       const singleSelector = (body.context.selector as string) ?? "";
       const allSelectors = selectors.length > 0 ? selectors : singleSelector ? [singleSelector] : ["body"];
 
+      const response = (body.context.response as string) ?? undefined;
+
       for (const selector of allSelectors.slice(0, 30)) {
         addInteraction({
           domain: parsed.hostname,
@@ -320,6 +344,7 @@ app.post("/api/events", async (c) => {
           selector,
           eventType: mappedType,
           content: (body.context.text as string) ?? "",
+          response,
         });
       }
     }
@@ -381,6 +406,48 @@ app.post("/api/feedback", async (c) => {
 
 // ── Dashboard (site owner view, no API key required) ──
 
+// Page proxy must be registered before :domain param route
+app.get("/dashboard/proxy", async (c) => {
+  const url = c.req.query("url");
+  if (!url) return c.text("url query parameter required", 400);
+
+  try {
+    const parsed = new URL(url);
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; IvyDashboard/1.0)",
+        Accept: "text/html",
+      },
+    });
+
+    if (!response.ok) return c.text(`Failed to fetch: ${response.status}`, 502);
+
+    let html = await response.text();
+
+    // Strip script tags for safety
+    html = html.replace(/<script[\s\S]*?<\/script>/gi, "");
+    html = html.replace(/<noscript[\s\S]*?<\/noscript>/gi, "");
+
+    // Convert relative URLs to absolute
+    const base = `${parsed.protocol}//${parsed.host}`;
+    html = html.replace(
+      /(<(?:link|img|a|source|video|audio)\b[^>]*?\s(?:href|src|srcset))="(?!(?:https?:|data:|#|javascript:))(\/?)([^"]*?)"/gi,
+      (_, prefix, slash, path) =>
+        `${prefix}="${slash ? base + "/" : base + parsed.pathname.replace(/[^/]*$/, "")}${path}"`
+    );
+
+    // Inject a <base> tag so remaining relative resources resolve correctly
+    html = html.replace(
+      /(<head[^>]*>)/i,
+      `$1<base href="${base}${parsed.pathname}" />`
+    );
+
+    return c.html(html);
+  } catch (err) {
+    return c.text(`Proxy error: ${err instanceof Error ? err.message : "unknown"}`, 502);
+  }
+});
+
 app.get("/dashboard/:domain", (c) => {
   const domain = c.req.param("domain");
   const insights = getAggregatedInsights(domain);
@@ -392,6 +459,29 @@ app.get("/dashboard/:domain/page", (c) => {
   const path = c.req.query("path") ?? "/";
   const insights = getPageInsights(domain, path);
   return c.json({ success: true, data: insights });
+});
+
+// ── Response Management (for dashboard) ──
+
+app.get("/dashboard/responses", (c) => {
+  const responses = getAllCachedResponses();
+  return c.json({ success: true, data: responses });
+});
+
+app.put("/dashboard/responses/:id", async (c) => {
+  const id = c.req.param("id");
+  const body = await c.req.json<{ response: string; editedBy?: string }>();
+
+  if (!body.response || typeof body.response !== "string") {
+    return c.json({ success: false, error: { code: "VALIDATION_ERROR", message: "response is required" } }, 400);
+  }
+
+  const updated = updateCachedResponse(id, body.response, body.editedBy);
+  if (!updated) {
+    return c.json({ success: false, error: { code: "NOT_FOUND", message: "Response not found" } }, 404);
+  }
+
+  return c.json({ success: true, data: updated });
 });
 
 // ── Health ──

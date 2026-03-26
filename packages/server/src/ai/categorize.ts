@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { FeedbackCategory } from "../feedback/store.js";
+import type { FeedbackCategory } from "@ivy/shared/dashboard";
 
 const AI_TIMEOUT_MS = 15_000;
 const MAX_TOKENS = 128;

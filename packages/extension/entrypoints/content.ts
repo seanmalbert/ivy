@@ -22,10 +22,10 @@ export default defineContentScript({
       // Use ID if available
       if (el.id) return `#${CSS.escape(el.id)}`;
 
-      // Build a path using nth-child
+      // Build a path, but stop at the nearest ancestor with an ID
       const parts: string[] = [];
       let current: Element | null = el;
-      while (current && current !== document.body) {
+      while (current && current !== document.body && current !== document.documentElement) {
         const cur: Element = current;
         const tag = cur.tagName.toLowerCase();
         const parent: Element | null = cur.parentElement;
@@ -40,6 +40,13 @@ export default defineContentScript({
         } else {
           parts.unshift(tag);
         }
+
+        // If parent has an ID, anchor there and stop
+        if (parent.id && parent !== document.body) {
+          parts.unshift(`#${CSS.escape(parent.id)}`);
+          break;
+        }
+
         current = parent;
       }
       return parts.join(" > ");
@@ -538,6 +545,24 @@ export default defineContentScript({
     function showFloatingButton(x: number, y: number, selectedText: string) {
       removeFloatingButton();
 
+      // Capture the selection context NOW, before the user clicks and the selection changes
+      const selection = window.getSelection();
+      const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+      const ancestor = range?.commonAncestorContainer;
+      // Get the element (commonAncestorContainer may be a text node)
+      let contextEl: Element | null = ancestor instanceof Element ? ancestor : ancestor?.parentElement ?? null;
+      // Walk up to the nearest block-level element for a more stable selector
+      const inlineElements = new Set(["SPAN", "A", "EM", "STRONG", "B", "I", "U", "CODE", "MARK", "SMALL", "SUB", "SUP", "ABBR"]);
+      while (contextEl && inlineElements.has(contextEl.tagName) && contextEl.parentElement) {
+        contextEl = contextEl.parentElement;
+      }
+      const capturedSelector = contextEl ? getUniqueSelector(contextEl) : "";
+      const capturedContext = contextEl?.textContent?.slice(0, 500) ?? "";
+
+      // Save for Reply feature immediately
+      lastHighlightSelector = capturedSelector;
+      lastHighlightText = selectedText;
+
       floatingButton = document.createElement("div");
       floatingButton.id = "ivy-ask-button";
       floatingButton.textContent = "Ask Ivy";
@@ -550,14 +575,6 @@ export default defineContentScript({
       `;
 
       floatingButton.addEventListener("click", () => {
-        const anchorEl = window.getSelection()?.anchorNode?.parentElement;
-        const selContext = anchorEl?.textContent?.slice(0, 500) ?? "";
-        const selSelector = anchorEl ? getUniqueSelector(anchorEl) : "";
-
-        // Save for Reply feature
-        lastHighlightSelector = selSelector;
-        lastHighlightText = selectedText;
-
         // Show loading state
         floatingButton!.textContent = "Thinking...";
         floatingButton!.style.opacity = "0.7";
@@ -567,8 +584,8 @@ export default defineContentScript({
           type: "HIGHLIGHT_ASK",
           payload: {
             selectedText,
-            context: selContext,
-            selector: selSelector,
+            context: capturedContext,
+            selector: capturedSelector,
             url: window.location.href,
           },
         });

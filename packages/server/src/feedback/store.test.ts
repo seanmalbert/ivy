@@ -126,7 +126,8 @@ describe("getPageInsights", () => {
     });
 
     const insights = getPageInsights("ssa.gov", "/");
-    expect(insights.topQuestions[0].question).toBe("what is snap?");
+    expect(insights.topQuestions[0].question).toBe("What is SNAP?");
+    expect(insights.topQuestions[0].selector).toBe("#faq");
     expect(insights.topQuestions[0].count).toBe(5);
     expect(insights.topQuestions[1].count).toBe(1);
   });

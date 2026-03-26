@@ -150,13 +150,14 @@ export default defineBackground(() => {
   async function requestCloudExplain(
     text: string,
     context: string,
-    readingLevel?: string
+    readingLevel?: string,
+    url?: string
   ): Promise<string | null> {
     try {
       const response = await fetch(`${API_BASE_URL}/api/explain`, {
         method: "POST",
         headers: apiHeaders(),
-        body: JSON.stringify({ text, context, readingLevel }),
+        body: JSON.stringify({ text, context, readingLevel, url }),
       });
 
       if (!response.ok) return null;
@@ -718,7 +719,7 @@ export default defineBackground(() => {
         type: "HIGHLIGHT_ANSWER",
         payload: { answer: onDeviceAnswer },
       });
-      trackEvent("highlight_ask", { url, selector, text: selectedText.slice(0, 100), source: "on-device" });
+      trackEvent("highlight_ask", { url, selector, text: selectedText.slice(0, 200), response: onDeviceAnswer, source: "on-device" });
       return;
     }
 
@@ -726,14 +727,14 @@ export default defineBackground(() => {
     const preferences = await getPreferences();
     const readingLevel = preferences.readingLevel as string | undefined;
 
-    const answer = await requestCloudExplain(selectedText, context, readingLevel);
+    const answer = await requestCloudExplain(selectedText, context, readingLevel, url);
 
     if (answer) {
       chrome.tabs.sendMessage(tabId, {
         type: "HIGHLIGHT_ANSWER",
         payload: { answer },
       });
-      trackEvent("highlight_ask", { url, selector, text: selectedText.slice(0, 100), source: "cloud" });
+      trackEvent("highlight_ask", { url, selector, text: selectedText.slice(0, 200), response: answer, source: "cloud" });
     } else {
       chrome.tabs.sendMessage(tabId, {
         type: "ERROR",

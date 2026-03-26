@@ -17,6 +17,10 @@
     "./encryption": {
       "types": "./dist/encryption.d.ts",
       "import": "./dist/encryption.js"
+    },
+    "./dashboard": {
+      "types": "./dist/dashboard.d.ts",
+      "import": "./dist/dashboard.js"
     }
   },
   "scripts": {

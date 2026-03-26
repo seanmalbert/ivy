@@ -1,17 +1,16 @@
+import type {
+  InteractionType,
+  FeedbackCategory,
+  SelectorInsight,
+  PageInsights,
+  DomainInsights,
+} from "@ivy/shared/dashboard";
+
+export type { InteractionType, FeedbackCategory, SelectorInsight, PageInsights, DomainInsights };
+
 const MAX_INTERACTIONS_PER_DOMAIN = 10_000;
 
 // ── Types ──
-
-export type InteractionType = "simplified" | "asked" | "form-help" | "comment";
-
-export type FeedbackCategory =
-  | "confusing-language"
-  | "missing-info"
-  | "broken-feature"
-  | "accessibility"
-  | "navigation"
-  | "positive"
-  | "other";
 
 export interface PageInteraction {
   id: string;
@@ -21,29 +20,9 @@ export interface PageInteraction {
   selector: string;
   eventType: InteractionType;
   content: string;
+  response?: string;
   category?: FeedbackCategory;
   createdAt: string;
-}
-
-export interface SelectorInsight {
-  selector: string;
-  eventType: InteractionType;
-  count: number;
-  samples: string[];
-}
-
-export interface PageInsights {
-  urlPath: string;
-  totalInteractions: number;
-  insights: SelectorInsight[];
-  topQuestions: Array<{ question: string; count: number }>;
-  categoryDistribution: Record<string, number>;
-}
-
-export interface DomainInsights {
-  domain: string;
-  totalInteractions: number;
-  pages: PageInsights[];
 }
 
 // ── Store ──
@@ -100,30 +79,34 @@ export function getPageInsights(
   const insights: SelectorInsight[] = [];
   for (const [, group] of groups) {
     const first = group.items[0];
+    // Keep samples and responses aligned by index
+    const recentItems = group.items.slice(-3).filter((i) => i.content);
     insights.push({
       selector: first.selector,
       eventType: first.eventType,
       count: group.items.length,
-      samples: group.items
-        .slice(-3)
-        .map((i) => i.content)
-        .filter(Boolean),
+      samples: recentItems.map((i) => i.content),
+      responses: recentItems.map((i) => i.response ?? ""),
     });
   }
 
   // Sort by count descending
   insights.sort((a, b) => b.count - a.count);
 
-  // Top questions
-  const questionCounts = new Map<string, number>();
+  // Top questions -- keep original casing and selector
+  const questionMap = new Map<string, { question: string; selector: string; count: number }>();
   for (const i of interactions) {
     if (i.eventType === "asked" && i.content) {
-      const q = i.content.toLowerCase().trim();
-      questionCounts.set(q, (questionCounts.get(q) ?? 0) + 1);
+      const key = i.content.toLowerCase().trim();
+      const existing = questionMap.get(key);
+      if (existing) {
+        existing.count++;
+      } else {
+        questionMap.set(key, { question: i.content, selector: i.selector, count: 1 });
+      }
     }
   }
-  const topQuestions = Array.from(questionCounts.entries())
-    .map(([question, count]) => ({ question, count }))
+  const topQuestions = Array.from(questionMap.values())
     .sort((a, b) => b.count - a.count)
     .slice(0, 10);
 
