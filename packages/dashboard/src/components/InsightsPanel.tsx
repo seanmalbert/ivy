@@ -52,7 +52,7 @@ function InsightRow({ insight }: { insight: SelectorInsight }) {
               {insight.responses[i] && (
                 <div className="text-sm text-gray-500 bg-violet-50 border-l-2 border-violet-300 rounded-r p-2 leading-relaxed ml-3">
                   <span className="text-[10px] font-semibold text-violet-500 uppercase tracking-wide block mb-1">
-                    Ivy's response
+                    aiKea's response
                   </span>
                   <MarkdownText text={insight.responses[i]} />
                 </div>

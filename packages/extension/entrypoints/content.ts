@@ -214,7 +214,7 @@ export default defineContentScript({
                 const bar = document.createElement("div");
                 bar.className = "ivy-toggle-bar";
                 const label = document.createElement("span");
-                label.textContent = "Simplified by Ivy";
+                label.textContent = "Simplified by aiKea";
                 const btn = document.createElement("button");
                 btn.className = "ivy-toggle-btn";
                 btn.textContent = "Show original";
@@ -565,7 +565,7 @@ export default defineContentScript({
 
       floatingButton = document.createElement("div");
       floatingButton.id = "ivy-ask-button";
-      floatingButton.textContent = "Ask Ivy";
+      floatingButton.textContent = "Ask aiKea";
       floatingButton.style.cssText = `
         position:fixed; left:${x}px; top:${y - 40}px;
         background:#7c3aed; color:white; padding:6px 12px;
@@ -731,7 +731,7 @@ export default defineContentScript({
       title.style.cssText = "display:flex; align-items:center; gap:8px;";
       const badge = document.createElement("span");
       badge.style.cssText = "background:#7c3aed; color:white; font-size:11px; font-weight:bold; padding:2px 8px; border-radius:6px;";
-      badge.textContent = "Ivy";
+      badge.textContent = "aiKea";
       title.appendChild(badge);
       const titleText = document.createElement("span");
       titleText.style.cssText = "font-size:13px; font-weight:600; color:#374151;";
@@ -841,7 +841,7 @@ export default defineContentScript({
 
         const inputHint = document.createElement("div");
         inputHint.style.cssText = "font-size:12px; color:#9ca3af; margin-bottom:8px;";
-        inputHint.textContent = "Your feedback is about the website content you highlighted, not Ivy's explanation. This helps site owners improve their pages.";
+        inputHint.textContent = "Your feedback is about the website content you highlighted, not aiKea's explanation. This helps site owners improve their pages.";
         inputSection.appendChild(inputHint);
 
         const input = document.createElement("textarea");

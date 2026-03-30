@@ -10,7 +10,7 @@ interface ChatMessage {
 const ONBOARDING_STEPS = [
   {
     question:
-      "Welcome to Ivy! I'm here to help make the web easier for you. Let's set things up. How would you describe your reading comfort level?",
+      "Welcome to aiKea! I'm here to help make the web easier for you. Let's set things up. How would you describe your reading comfort level?",
     options: [
       { label: "Keep it very simple (elementary)", value: "elementary" },
       { label: "Somewhere in the middle", value: "middle-school" },
@@ -125,7 +125,7 @@ export function PreferenceChat() {
           {
             role: "assistant",
             content:
-              "All set! I'll start adapting web pages to your preferences. You can always change these in Settings. Click the Ivy icon on any page to get started.",
+              "All set! I'll start adapting web pages to your preferences. You can always change these in Settings. Click the aiKea icon on any page to get started.",
           },
         ]);
       }, 500);

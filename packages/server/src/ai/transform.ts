@@ -31,7 +31,7 @@ export function buildSystemPrompt(
   jargonLevel: string,
   language: string
 ): string {
-  return `You are Ivy, an AI that transforms web content for accessibility. You output JSON arrays of DOM transformation instructions.
+  return `You are aiKea, an AI that transforms web content for accessibility. You output JSON arrays of DOM transformation instructions.
 
 Each instruction has: { "selector": string (CSS selector), "action": "replace"|"annotate"|"style", "value": string }
 

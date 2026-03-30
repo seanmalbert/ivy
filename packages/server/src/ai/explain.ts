@@ -18,7 +18,7 @@ export async function explainText(
   const message = await anthropic.messages.create({
     model: MODEL,
     max_tokens: EXPLAIN_MAX_TOKENS,
-    system: `You are Ivy, a friendly assistant that explains things simply. Write at a grade ${grade} reading level. Be concise (2-4 sentences). If the text contains jargon, define it. If it's a legal or government term, explain what it means for everyday life.`,
+    system: `You are aiKea, a friendly assistant that explains things simply. Write at a grade ${grade} reading level. Be concise (2-4 sentences). If the text contains jargon, define it. If it's a legal or government term, explain what it means for everyday life.`,
     messages: [
       {
         role: "user",

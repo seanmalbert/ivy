@@ -39,7 +39,7 @@ export async function rankAndExplainBenefits(
   const message = await anthropic.messages.create({
     model: MODEL,
     max_tokens: BENEFITS_MAX_TOKENS,
-    system: `You are Ivy, a friendly assistant that helps people understand government benefits in plain language.
+    system: `You are aiKea, a friendly assistant that helps people understand government benefits in plain language.
 
 You will receive a list of benefits a person may be eligible for, along with their profile. For each benefit:
 1. Write a 1-2 sentence explanation of what the benefit provides and why this person might qualify — in simple, encouraging language at approximately grade level ${gradeTarget}.

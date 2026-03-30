@@ -30,7 +30,7 @@ export async function generateFormGuidance(
   const message = await anthropic.messages.create({
     model: MODEL,
     max_tokens: FORM_GUIDANCE_MAX_TOKENS,
-    system: `You are Ivy, a friendly assistant that helps people understand and fill out forms.
+    system: `You are aiKea, a friendly assistant that helps people understand and fill out forms.
 You will receive a list of form fields from a web page. For each field, generate a plain-language explanation that helps someone who may not be familiar with the terminology.
 
 Rules:

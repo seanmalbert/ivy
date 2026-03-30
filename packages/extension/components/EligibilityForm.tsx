@@ -47,7 +47,7 @@ export function EligibilityForm({ onSubmit, isEvaluating }: EligibilityFormProps
     <div className="space-y-4">
       <div className="rounded-xl bg-violet-50 p-3">
         <p className="text-sm text-violet-700 leading-relaxed">
-          Answer a few questions and Ivy will find government benefits you may qualify for.
+          Answer a few questions and aiKea will find government benefits you may qualify for.
           All information stays on your device.
         </p>
       </div>
