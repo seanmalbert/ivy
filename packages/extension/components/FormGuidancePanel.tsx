@@ -10,7 +10,7 @@ export function FormGuidancePanel() {
         <div className="rounded-xl bg-violet-50 p-4">
           <h3 className="text-sm font-medium text-violet-900">Form Help</h3>
           <p className="mt-1 text-sm text-violet-700 leading-relaxed">
-            aiKea can scan this page for forms and explain each field in plain
+            Ivy can scan this page for forms and explain each field in plain
             language. Help icons will appear next to form fields on the page.
           </p>
         </div>

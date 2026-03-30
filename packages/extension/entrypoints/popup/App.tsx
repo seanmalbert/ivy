@@ -39,10 +39,10 @@ export default function App() {
     <div className="w-64 p-4 space-y-4">
       <div className="flex items-center gap-2">
         <div className="w-8 h-8 rounded-lg bg-violet-600 flex items-center justify-center">
-          <span className="text-white font-bold text-sm">aiKea</span>
+          <span className="text-white font-bold text-sm">Ivy</span>
         </div>
         <div>
-          <h1 className="text-sm font-semibold text-gray-900">aiKea</h1>
+          <h1 className="text-sm font-semibold text-gray-900">Ivy</h1>
           <p className="text-xs text-gray-500">Personal Web Assistant</p>
         </div>
       </div>
@@ -56,7 +56,7 @@ export default function App() {
               : "bg-gray-200 text-gray-600 hover:bg-gray-300"
           }`}
         >
-          {isEnabled ? "aiKea is On" : "aiKea is Off"}
+          {isEnabled ? "Ivy is On" : "Ivy is Off"}
         </button>
 
         <button

@@ -9,7 +9,7 @@ export default defineConfig({
     startUrls: ["https://www.ssa.gov/benefits/"],
   },
   manifest: {
-    name: "aiKea - Personal Web Assistant",
+    name: "Ivy - Personal Web Assistant",
     description:
       "AI-powered assistant that adapts web content to your needs. Simplifies text, discovers benefits, and guides you through forms.",
     permissions: ["activeTab", "storage", "sidePanel", "scripting"],

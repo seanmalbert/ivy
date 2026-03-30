@@ -103,7 +103,7 @@ export function Sidebar() {
       <div className="h-screen flex flex-col bg-white">
         <header className="flex items-center gap-2 px-4 py-3 border-b border-gray-200">
           <div className="w-8 h-8 rounded-lg bg-violet-600 flex items-center justify-center">
-            <span className="text-white font-bold text-sm">aiKea</span>
+            <span className="text-white font-bold text-sm">Ivy</span>
           </div>
           <h1 className="text-base font-semibold text-gray-900">Setup</h1>
         </header>
@@ -118,9 +118,9 @@ export function Sidebar() {
       <header className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-violet-600 flex items-center justify-center">
-            <span className="text-white font-bold text-sm">aiKea</span>
+            <span className="text-white font-bold text-sm">Ivy</span>
           </div>
-          <h1 className="text-base font-semibold text-gray-900">aiKea</h1>
+          <h1 className="text-base font-semibold text-gray-900">Ivy</h1>
         </div>
         <div className="flex items-center gap-2">
           <TransformBadge
@@ -170,10 +170,10 @@ export function Sidebar() {
 
             <div className="rounded-xl bg-violet-50 p-4">
               <h3 className="text-sm font-medium text-violet-900">
-                How aiKea works
+                How Ivy works
               </h3>
               <p className="mt-1 text-sm text-violet-700 leading-relaxed">
-                Visit any web page and aiKea will adapt the content to your
+                Visit any web page and Ivy will adapt the content to your
                 preferences. Highlight any text to ask questions about it.
               </p>
             </div>

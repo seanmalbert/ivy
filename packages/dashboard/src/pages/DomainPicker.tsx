@@ -20,7 +20,7 @@ export function DomainPicker() {
     <div className="max-w-lg mx-auto mt-16">
       <div className="text-center mb-8">
         <div className="w-16 h-16 rounded-2xl bg-violet-600 flex items-center justify-center mx-auto mb-4">
-          <span className="text-white font-bold text-2xl">aiKea</span>
+          <span className="text-white font-bold text-2xl">Ivy</span>
         </div>
         <h2 className="text-2xl font-bold text-gray-900">Site Insights</h2>
         <p className="mt-2 text-gray-500">

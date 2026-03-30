@@ -26,7 +26,7 @@ export async function categorizeFeedback(
     const message = await anthropic.messages.create({
       model: MODEL,
       max_tokens: MAX_TOKENS,
-      system: `You are aiKea's feedback classifier. You categorize user feedback about websites into exactly one category.
+      system: `You categorize user feedback about websites into exactly one category.
 
 Categories:
 - "confusing-language": Text is hard to understand, uses jargon, or is unclear

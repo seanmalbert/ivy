@@ -415,7 +415,7 @@ app.get("/dashboard/proxy", async (c) => {
     const parsed = new URL(url);
     const response = await fetch(url, {
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; aiKeaDashboard/1.0)",
+        "User-Agent": "Mozilla/5.0 (compatible; IvyDashboard/1.0)",
         Accept: "text/html",
       },
     });
@@ -498,5 +498,5 @@ app.get("/health", (c) => {
 
 const port = parseInt(process.env.PORT ?? "3001", 10);
 serve({ fetch: app.fetch, port }, () => {
-  console.log(`aiKea server running on http://localhost:${port}`);
+  console.log(`Ivy server running on http://localhost:${port}`);
 });

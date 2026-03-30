@@ -135,7 +135,7 @@ export function PageDetail() {
                           {selectedInsight.responses[i] && (
                             <div className="text-sm text-gray-600 bg-violet-50 border-l-2 border-violet-400 rounded-r-lg p-3 leading-relaxed ml-4">
                               <span className="text-[10px] font-semibold text-violet-500 uppercase tracking-wide block mb-1">
-                                aiKea's response
+                                Ivy's response
                               </span>
                               <MarkdownText text={selectedInsight.responses[i]} />
                             </div>

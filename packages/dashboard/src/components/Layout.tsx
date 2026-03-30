@@ -7,10 +7,10 @@ export function Layout() {
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center gap-3">
           <Link to="/" className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-violet-600 flex items-center justify-center">
-              <span className="text-white font-bold text-sm">aiKea</span>
+              <span className="text-white font-bold text-sm">Ivy</span>
             </div>
             <h1 className="text-lg font-semibold text-gray-900">
-              aiKea Dashboard
+              Ivy Dashboard
             </h1>
           </Link>
         </div>
