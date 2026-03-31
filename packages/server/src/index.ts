@@ -35,12 +35,15 @@ const app = new Hono();
 
 app.use("*", logger());
 // Allowed origins for CORS
-const ALLOWED_LOCALHOST = new Set([
+const ALLOWED_ORIGINS = new Set([
   "http://localhost:3000",
   "http://localhost:3001",
   "http://localhost:5173",
   "http://localhost:8787",
 ]);
+
+// Dashboard staging/production origins (set via env var)
+const DASHBOARD_ORIGIN = process.env.DASHBOARD_ORIGIN;
 
 app.use(
   "*",
@@ -49,7 +52,9 @@ app.use(
       if (!origin) return null; // Reject requests with no origin
       if (origin.startsWith("chrome-extension://")) return origin;
       if (origin.startsWith("moz-extension://")) return origin;
-      if (ALLOWED_LOCALHOST.has(origin)) return origin;
+      if (ALLOWED_ORIGINS.has(origin)) return origin;
+      if (DASHBOARD_ORIGIN && origin === DASHBOARD_ORIGIN) return origin;
+      if (origin.endsWith(".up.railway.app")) return origin;
       return null;
     },
     allowMethods: ["GET", "POST"],
