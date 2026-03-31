@@ -13,7 +13,13 @@ export default defineConfig({
     description:
       "AI-powered assistant that adapts web content to your needs. Simplifies text, discovers benefits, and guides you through forms.",
     permissions: ["activeTab", "storage", "sidePanel", "scripting"],
-    host_permissions: [],
+    host_permissions: [
+      "*://*.gov/*",
+      "*://*.gov.sg/*",
+      "*://*.gov.uk/*",
+      "*://*.gov.au/*",
+      "*://*.gc.ca/*",
+    ],
     side_panel: {
       default_path: "sidepanel.html",
     },

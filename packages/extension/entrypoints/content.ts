@@ -9,7 +9,13 @@ import type { ExtractedFormField, FormFieldGuidance } from "@ivy/shared";
 import { STORAGE_KEYS } from "@ivy/shared";
 
 export default defineContentScript({
-  matches: ["<all_urls>"],
+  matches: [
+    "*://*.gov/*",
+    "*://*.gov.sg/*",
+    "*://*.gov.uk/*",
+    "*://*.gov.au/*",
+    "*://*.gc.ca/*",
+  ],
   runAt: "document_idle",
 
   main() {
