@@ -1,5 +1,6 @@
-FROM node:22-slim AS build
+FROM node:22-slim
 RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
+RUN npm install -g serve
 
 WORKDIR /app
 
@@ -19,11 +20,5 @@ COPY tsconfig.base.json ./
 # Build shared types first, then dashboard
 RUN pnpm --filter @ivy/shared build && pnpm --filter @ivy/dashboard build
 
-# Serve with a lightweight static server
-FROM node:22-slim
-RUN npm install -g serve
-COPY --from=build /app/packages/dashboard/dist /app/dist
-COPY packages/dashboard/serve.json /app/dist/serve.json
-
 ENV PORT=3000
-CMD sh -c "serve -s /app/dist -l tcp://0.0.0.0:$PORT"
+CMD sh -c "serve -s /app/packages/dashboard/dist -l tcp://0.0.0.0:$PORT"
