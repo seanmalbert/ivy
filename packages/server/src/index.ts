@@ -54,7 +54,6 @@ app.use(
       if (origin.startsWith("moz-extension://")) return origin;
       if (ALLOWED_ORIGINS.has(origin)) return origin;
       if (DASHBOARD_ORIGIN && origin === DASHBOARD_ORIGIN) return origin;
-      if (origin.endsWith(".up.railway.app")) return origin;
       return null;
     },
     allowMethods: ["GET", "POST"],
