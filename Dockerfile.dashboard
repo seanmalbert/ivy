@@ -20,5 +20,5 @@ COPY tsconfig.base.json ./
 # Build shared types first, then dashboard
 RUN pnpm --filter @ivy/shared build && pnpm --filter @ivy/dashboard build
 
-ENV PORT=3000
+EXPOSE 3000
 CMD sh -c "serve -s /app/packages/dashboard/dist -l tcp://0.0.0.0:$PORT"
